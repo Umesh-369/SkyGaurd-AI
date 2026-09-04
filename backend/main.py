@@ -44,6 +44,7 @@ app.include_router(simulator_router.router, prefix=settings.API_V1_STR)
 app.include_router(risks.router, prefix=settings.API_V1_STR)
 app.include_router(alerts.router, prefix=settings.API_V1_STR)
 app.include_router(analytics.router, prefix=settings.API_V1_STR)
+app.include_router(advanced_ml.router, prefix=settings.API_V1_STR)
 
 detector = Tier1AnomalyDetector()
 explainer = AnomalyExplainer()
@@ -104,10 +105,25 @@ async def background_sensor_simulation_loop():
                 factors = explainer.explain_instance(t, p, rh, detector)
                 r["contributing_factors"] = factors
 
+                # Advanced AI Integration: Concept Drift, Hardware Fault Diagnosis, and Forecasting
+                from ml.online_learner import online_stream_learner
+                from ml.fault_classifier import fault_classifier
+                from ml.forecaster import weather_forecaster
+                from ml.lstm_autoencoder import deep_anomaly_detector
+
+                drift_res = online_stream_learner.update_stream(r, is_anomaly=pred["is_anomaly"])
+                r["concept_drift"] = drift_res
+
                 if pred["is_anomaly"]:
                     prim_feat = factors[0]["feature"]
                     bad_v = t if prim_feat == "temperature" else (p if prim_feat == "pressure" else rh)
                     r["imputed_suggestion"] = imputer.suggest_correction(prim_feat, bad_v, spatial_neighbors=neighbors)
+
+                    # Multi-Class Hardware Fault Diagnosis
+                    is_contra = "CONTRADICTED" in pred.get("spatial_verdict", "")
+                    is_froz = r.get("injected_fault_type") in ["STUCK_SENSOR", "FROZEN"]
+                    r["fault_diagnosis"] = fault_classifier.diagnose_fault(t, p, rh, spatial_contradicted=is_contra, is_frozen=is_froz)
+
                     # Push live anomaly to anomalies router feed
                     anomalies.record_live_anomaly(r, pred, factors, r.get("imputed_suggestion"))
 
@@ -115,10 +131,18 @@ async def background_sensor_simulation_loop():
 
             avg_latency = round(total_infer_time_ms / max(1, infer_count), 3)
 
-            # 3. Calculate dynamic Tier 2 Risk Intelligence context for live broadcast
+            # 3. Calculate dynamic Tier 2 Risk Intelligence & GRU Forecasting context
             sample_r = valid_readings.get("AWS-01") or valid_readings.get("AWS_GOA_01") or (readings[0] if len(readings) > 0 else {"temperature": 28.5, "pressure": 1012.0, "humidity": 78.0})
             w_api = weather_api_service.fetch_current_weather()
             latest_risk_summary = disaster_risk_engine.calculate_disaster_risks(sample_r, w_api)
+
+            # Forecast context for sample station
+            sample_window = [
+                {"temperature": sample_r.get("temperature", 28.5) - 0.1 * i, "pressure": sample_r.get("pressure", 1012.0) + 0.1 * i, "humidity": sample_r.get("humidity", 78.0)}
+                for i in range(12)
+            ]
+            latest_forecast = weather_forecaster.forecast_station(sample_window)
+            latest_deep_eval = deep_anomaly_detector.evaluate_sequence(sample_window)
 
             if len(readings) > 0 and len(manager.active_connections) > 0:
                 await manager.broadcast({
@@ -126,6 +150,8 @@ async def background_sensor_simulation_loop():
                     "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     "readings": readings,
                     "disaster_risks": latest_risk_summary,
+                    "forecast_intelligence": latest_forecast,
+                    "deep_anomaly_intelligence": latest_deep_eval,
                     "is_running": simulator_instance.is_running,
                     "speed_multiplier": simulator_instance.speed_multiplier,
                     "inference_latency_ms": avg_latency

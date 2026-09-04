@@ -179,7 +179,10 @@ interface SkyGuardState {
   is3DMode: boolean;
   timeRange: '1H' | '24H' | '7D';
   liveInferenceLatency: number;
-  realtimeShapValues: Array<{ feature: string; importance: number; label: string }>;
+  forecastIntelligence?: any;
+  deepAnomalyIntelligence?: any;
+  conceptDriftData?: any;
+  faultDiagnosis?: any;
   offlineEvalMetrics?: OfflineEvalMetrics;
 
   // Actions
@@ -392,7 +395,8 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
                 return !c || c.id !== m.id || c.readings.temperature !== m.readings.temperature || c.readings.pressure !== m.readings.pressure || c.readings.humidity !== m.readings.humidity;
               });
 
-            const finalAnomalies = hasAnomChanged ? mergedAnomalies : currentAnomalies;
+            const sampleDrift = readings.find(r => (r as any).concept_drift)?.['concept_drift'];
+            const sampleFault = readings.find(r => (r as any).fault_diagnosis)?.['fault_diagnosis'];
 
             set({
               liveReadings: readings,
@@ -400,6 +404,10 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
               stations: updatedStations,
               anomalies: finalAnomalies,
               disasterRisks: payload.disaster_risks ?? get().disasterRisks,
+              forecastIntelligence: payload.forecast_intelligence ?? get().forecastIntelligence,
+              deepAnomalyIntelligence: payload.deep_anomaly_intelligence ?? get().deepAnomalyIntelligence,
+              conceptDriftData: sampleDrift ?? get().conceptDriftData,
+              faultDiagnosis: sampleFault ?? get().faultDiagnosis,
               isSimulating: isSim,
               simSpeed: spd,
               liveInferenceLatency: latency,

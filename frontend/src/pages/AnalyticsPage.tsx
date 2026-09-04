@@ -28,6 +28,10 @@ import {
 } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSkyGuardStore } from '../store/useSkyGuardStore';
+import { WeatherForecastCard } from '../components/WeatherForecastCard';
+import { DeepLearningPanel } from '../components/DeepLearningPanel';
+import { ConceptDriftCard } from '../components/ConceptDriftCard';
+import { FaultDiagnosticCard } from '../components/FaultDiagnosticCard';
 
 export const AnalyticsPage: React.FC = () => {
   const { 
@@ -40,6 +44,10 @@ export const AnalyticsPage: React.FC = () => {
     liveInferenceLatency,
     realtimeShapValues,
     offlineEvalMetrics,
+    forecastIntelligence,
+    deepAnomalyIntelligence,
+    conceptDriftData,
+    faultDiagnosis,
     isSimulating
   } = useSkyGuardStore();
 
@@ -159,6 +167,23 @@ export const AnalyticsPage: React.FC = () => {
               <span className="font-bold text-slate-900">{isSimulating ? 'LIVE BROADCAST' : 'PAUSED'}</span>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* ADVANCED AI & MACHINE LEARNING ENGINE SUITE */}
+      <div className="space-y-6">
+        <div className="flex items-center space-x-2.5 text-indigo-700 font-mono border-b border-slate-200 pb-3">
+          <Zap className="w-5 h-5 text-indigo-600 animate-pulse" />
+          <h2 className="font-extrabold text-sm uppercase tracking-widest text-slate-900">
+            ADVANCED AI & MACHINE LEARNING ENGINE SUITE
+          </h2>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <WeatherForecastCard forecast={forecastIntelligence} />
+          <DeepLearningPanel deepIntelligence={deepAnomalyIntelligence} />
+          <ConceptDriftCard driftData={conceptDriftData} />
+          <FaultDiagnosticCard diagnosis={faultDiagnosis} />
         </div>
       </div>
 
