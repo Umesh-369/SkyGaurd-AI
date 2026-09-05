@@ -3,7 +3,7 @@
 # 🛡️ SkyGuard AI
 ### **Next-Gen Autonomous Meteorological Command Center & AWS Sensor Intelligence**
 
-[![SIH Problem Statement](https://img.shields.io/badge/SIH%202024-Problem%20Statement%2026073-0284c7?style=for-the-badge&logo=gov.in)](https://github.com/Umesh-369/SkyGaurd-AI)
+[![SIH Problem Statement](https://img.shields.io/badge/SIH%202026-Problem%20Statement%2026073-0284c7?style=for-the-badge&logo=gov.in)](https://github.com/Umesh-369/SkyGaurd-AI)
 [![OpenML Dataset](https://img.shields.io/badge/OpenML-Dataset%2043409%20(Goa%20Historical)-059669?style=for-the-badge&logo=python)](https://www.openml.org/d/43409)
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI%20%7C%20Python%203.11-009688?style=for-the-badge&logo=fastapi)](backend/)
 [![React](https://img.shields.io/badge/Frontend-React%2018%20%7C%20Vite%20%7C%20Tailwind-61DAFB?style=for-the-badge&logo=react)](frontend/)
