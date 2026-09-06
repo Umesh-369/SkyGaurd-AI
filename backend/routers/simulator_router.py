@@ -129,9 +129,13 @@ async def inject_fault_endpoint(req: FaultInjectRequest):
         duration_steps=req.duration_steps
     )
 
-    # Generate altered reading immediately
-    altered_reading = simulator_instance.generate_reading(target_station)
-    all_readings = simulator_instance.generate_all_stations()
+    # Generate altered reading immediately (even if simulation is currently paused)
+    altered_reading = simulator_instance.generate_reading(target_station, force_regenerate=True)
+    all_readings = [
+        simulator_instance.generate_reading(s_id, force_regenerate=(s_id == target_station))
+        for s_id in simulator_instance.stations
+    ]
+    all_readings = [r for r in all_readings if r is not None]
 
     anom_record = None
     if altered_reading:
@@ -207,7 +211,9 @@ async def inject_fault_endpoint(req: FaultInjectRequest):
 
     return {
         **res,
-        "anomaly": anom_record
+        "anomaly": anom_record,
+        "readings": all_readings,
+        "disaster_risks": latest_risk if 'latest_risk' in locals() else None
     }
 
 

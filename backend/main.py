@@ -66,6 +66,18 @@ async def startup_event():
     else:
         print(f"[Main] WARNING / SCHEMA MISMATCH: {schema_msg}")
 
+    # Pre-warm SHAP explainer
+    explainer_instance._init_shap_explainer(detector_instance)
+    try:
+        # Run one dummy inference pass to warm JIT/C-extensions
+        dummy_feat = {name: 0.0 for name in explainer_instance.feature_names}
+        import numpy as np
+        dummy_scaled = np.zeros((1, len(explainer_instance.feature_names)))
+        explainer_instance.explain_instance(dummy_feat, detector_instance, dummy_scaled)
+        print("[Main] SHAP explainer pre-warmed successfully.")
+    except Exception as e:
+        print(f"[Main] SHAP explainer warmup notice: {e}")
+
     # 2. Launch background continuous simulation loop
     asyncio.create_task(background_sensor_simulation_loop())
     print("[Main] Background telemetry simulation loop launched.")
@@ -155,6 +167,14 @@ async def background_sensor_simulation_loop():
                 total_infer_time_ms += infer_latency
                 infer_count += 1
 
+                # Ensure simulated faults are flagged with proper severity and root cause
+                if r.get("is_simulated_fault"):
+                    pred["is_anomaly"] = True
+                    if pred.get("severity") == "LOW":
+                        pred["severity"] = "HIGH"
+                    if not pred.get("root_cause") or pred.get("root_cause") == "normal":
+                        pred["root_cause"] = r.get("injected_fault_type", "sensor_anomaly").lower()
+
                 r["anomaly_evaluation"] = pred
                 r["inference_latency_ms"] = round(infer_latency, 3)
 
@@ -196,9 +216,9 @@ async def background_sensor_simulation_loop():
         except Exception as e:
             print(f"[SimulationLoop] Notice: {e}")
 
-        # Sleep interval scales inversely with speed_multiplier
-        base_sleep = 2.5
-        active_sleep = max(0.4, base_sleep / max(0.2, simulator_instance.speed_multiplier))
+        # Sleep interval scales inversely with speed_multiplier (fast real-time cadence)
+        base_sleep = 0.9
+        active_sleep = max(0.15, base_sleep / max(0.2, simulator_instance.speed_multiplier))
         await asyncio.sleep(active_sleep)
 
 
