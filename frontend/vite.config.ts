@@ -16,10 +16,20 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            // Silently suppress transient network disconnects
+          });
+        },
       },
       '/ws': {
         target: 'ws://localhost:8000',
         ws: true,
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            // Silently suppress transient WebSocket disconnects (e.g. page refresh / ECONNABORTED)
+          });
+        },
       },
     },
   },

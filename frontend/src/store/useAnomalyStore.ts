@@ -8,7 +8,6 @@ interface AnomalyStoreState {
   setFilterSeverity: (severity: string) => void;
   addOrUpdateAnomaly: (incoming: any) => void;
   resolveAnomaly: (stationId: string, rootCause?: string) => void;
-  clearAnomalies: () => void;
 }
 
 export const useAnomalyStore = create<AnomalyStoreState>((set) => ({
@@ -28,9 +27,6 @@ export const useAnomalyStore = create<AnomalyStoreState>((set) => ({
       (!rootCause || a.root_cause === rootCause || a.rootCause === rootCause)
     ));
     useSkyGuardStore.setState({ anomalies: updated });
-  },
-  clearAnomalies: () => {
-    useSkyGuardStore.setState({ anomalies: [] });
   }
 }));
 

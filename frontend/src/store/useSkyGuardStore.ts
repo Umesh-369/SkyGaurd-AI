@@ -188,7 +188,6 @@ interface SkyGuardState {
   setActiveTab: (tab: string) => void;
   setSelectedAnomalyId: (id: string | null) => void;
   navigateToAnomaly: (anomalyId: string) => void;
-  clearActiveAnomalies: () => Promise<void>;
   setTimeRange: (range: '1H' | '24H' | '7D') => void;
   setIs3DMode: (mode: boolean) => void;
   fetchInitialData: () => Promise<void>;
@@ -231,16 +230,6 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
   navigateToAnomaly: (anomalyId: string) => set({ selectedAnomalyId: anomalyId, activeTab: 'anomalies' }),
   setTimeRange: (range: '1H' | '24H' | '7D') => set({ timeRange: range }),
   setIs3DMode: (mode: boolean) => set({ is3DMode: mode }),
-
-  clearActiveAnomalies: async () => {
-    try {
-      await fetch('/api/anomalies/clear', { method: 'POST' });
-    } catch (e) {
-      console.warn('[SkyGuardStore] Clear anomalies backend warning:', e);
-    }
-    // Clear only the active live display feed, preserving history and ongoing telemetry
-    set({ anomalies: [] });
-  },
 
   fetchInitialData: async () => {
     try {
@@ -295,8 +284,10 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
     }
 
     try {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws/readings`;
+      const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const wsUrl = isLocalDev
+        ? `ws://${window.location.hostname}:8000/ws/readings`
+        : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/readings`;
       wsSocket = new WebSocket(wsUrl);
 
       wsSocket.onopen = () => {
@@ -518,16 +509,43 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
       });
       if (res.ok) {
         const data = await res.json();
+        let updatedAnomalies = get().anomalies;
+        let updatedHist = get().historicalAnomalies;
+
+        let selectedId = get().selectedAnomalyId;
         if (data.anomaly) {
           const normAnom = normalizeAnomalyRecord(data.anomaly);
-          const currentAnomalies = get().anomalies;
-          const currentHist = get().historicalAnomalies;
-          const updatedAnomalies = addOrUpdateAnomalyRecord(currentAnomalies, normAnom);
-          const updatedHist = addOrUpdateAnomalyRecord(currentHist, normAnom, 500);
-          set({ anomalies: updatedAnomalies, historicalAnomalies: updatedHist });
+          updatedAnomalies = addOrUpdateAnomalyRecord(updatedAnomalies, normAnom);
+          updatedHist = addOrUpdateAnomalyRecord(updatedHist, normAnom, 500);
+          selectedId = normAnom.id;
         }
+
+        const updatedReadings: Reading[] = data.readings || get().liveReadings;
+        const updatedStations = get().stations.map(st => {
+          const matching = updatedReadings.find(r => r.station_id === st.station_id || r.station_id === st.id);
+          if (matching) {
+            return {
+              ...st,
+              last_reading: {
+                temperature: matching.temperature,
+                pressure: matching.pressure,
+                humidity: matching.humidity,
+                timestamp: matching.timestamp
+              }
+            };
+          }
+          return st;
+        });
+
+        set({
+          anomalies: updatedAnomalies,
+          historicalAnomalies: updatedHist,
+          selectedAnomalyId: selectedId,
+          liveReadings: updatedReadings,
+          stations: updatedStations,
+          disasterRisks: data.disaster_risks ?? get().disasterRisks
+        });
       }
-      get().fetchInitialData();
     } catch (e) {
       console.error('[SkyGuardStore] Fault injection error:', e);
     }
@@ -535,13 +553,20 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
 
   clearFaults: async (stationId?: string) => {
     try {
-      await fetch('/api/simulator/clear', {
+      const res = await fetch('/api/simulator/clear', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ station_id: stationId, stationId: stationId })
       });
-      set({ anomalies: [] });
-      get().fetchInitialData();
+      if (res.ok) {
+        const data = await res.json();
+        const updatedReadings = data.readings || get().liveReadings;
+        set({
+          anomalies: [],
+          liveReadings: updatedReadings,
+          disasterRisks: data.disaster_risks ?? get().disasterRisks
+        });
+      }
     } catch (e) {
       console.error('[SkyGuardStore] Clear faults error:', e);
     }
@@ -588,38 +613,74 @@ export function evaluateTier1Anomaly(
   injectedFaultType?: string,
   backendEval?: any
 ): Tier1EvalResult {
+  const BASE_TEMP = 28.5;
+  const BASE_PRESS = 1012.0;
+  const BASE_HUM = 75.0;
+
+  const tempDelta = temperature - BASE_TEMP;
+  const pressDelta = BASE_PRESS - pressure;
+  const humDelta = humidity - BASE_HUM;
+
+  const absTempDev = Math.abs(tempDelta);
+  const absPressDev = Math.abs(pressDelta);
+  const absHumDev = Math.abs(humDelta);
+
+  const hasInjectedFault = Boolean(injectedFaultType && injectedFaultType !== 'NONE');
+
   // If backend evaluation is provided, use it directly as single source of truth (Section 8)
   if (backendEval) {
-    const isAnom = Boolean(backendEval.is_anomaly ?? backendEval.isAnomaly);
+    const isAnom = Boolean(backendEval.is_anomaly ?? backendEval.isAnomaly ?? hasInjectedFault);
     const category = backendEval.category || (backendEval.status === 'Communication Failure' ? 'COMMUNICATION_FAILURE' : 'SENSOR_FAULT');
-    const isComm = category === 'COMMUNICATION_FAILURE' || backendEval.status === 'Communication Failure';
-    const rawScore = typeof backendEval.isolation_forest_score === 'number'
-      ? Math.abs(backendEval.isolation_forest_score)
-      : (isAnom ? 0.78 : 0.12);
+    const isComm = category === 'COMMUNICATION_FAILURE' || backendEval.status === 'Communication Failure' || backendEval.root_cause === 'station_offline' || backendEval.root_cause === 'delayed_data' || backendEval.root_cause === 'missing_data';
 
-    const anomalyScore = isComm ? 0.95 : Number(Math.min(1.0, Math.max(0.0, isAnom ? Math.max(0.65, rawScore) : Math.min(0.30, rawScore))).toFixed(2));
-    
+    let anomalyScore: number;
     let statusBadge: 'NORMAL' | 'WARNING / DRIFT' | 'CRITICAL ANOMALY' = 'NORMAL';
-    if (isComm || backendEval.severity === 'CRITICAL' || anomalyScore > 0.65) {
+
+    if (isComm) {
+      anomalyScore = 0.95;
       statusBadge = 'CRITICAL ANOMALY';
-    } else if (backendEval.severity === 'HIGH' || backendEval.severity === 'MEDIUM' || anomalyScore >= 0.35) {
-      statusBadge = 'WARNING / DRIFT';
+    } else if (isAnom) {
+      const baseConfidence = typeof backendEval.confidence === 'number' ? backendEval.confidence : 0.88;
+      const ifScore = typeof backendEval.isolation_forest_score === 'number' ? Math.abs(backendEval.isolation_forest_score) : 0.25;
+
+      let calculatedScore: number;
+      if (backendEval.severity === 'CRITICAL') {
+        calculatedScore = Math.max(0.80, Math.min(0.99, baseConfidence));
+        statusBadge = 'CRITICAL ANOMALY';
+      } else if (backendEval.severity === 'HIGH') {
+        calculatedScore = Math.max(0.68, Math.min(0.88, baseConfidence * 0.92));
+        statusBadge = 'CRITICAL ANOMALY';
+      } else if (backendEval.severity === 'MEDIUM' || hasInjectedFault) {
+        calculatedScore = Math.max(0.42, Math.min(0.68, ifScore * 1.8 + 0.30));
+        statusBadge = 'WARNING / DRIFT';
+      } else {
+        calculatedScore = Math.max(0.35, Math.min(0.55, ifScore * 1.4 + 0.20));
+        statusBadge = 'WARNING / DRIFT';
+      }
+      anomalyScore = Number(calculatedScore.toFixed(2));
+    } else {
+      // Nominal reading - dynamic baseline score (0.01 - 0.20) based on actual live sensor reading
+      const normScore = Math.min(0.22, Math.max(0.01, (absTempDev / 35.0) * 0.4 + (absPressDev / 45.0) * 0.4 + (absHumDev / 80.0) * 0.2));
+      anomalyScore = Number(normScore.toFixed(2));
+      statusBadge = 'NORMAL';
     }
 
     const rootCause = backendEval.root_cause || backendEval.rootCause || injectedFaultType || (isAnom ? 'sensor_anomaly' : 'nominal');
-    const reasonText = backendEval.why_detected || backendEval.narrative_pack?.reason_narrative || (isAnom ? `Anomaly flagged: ${rootCause.replace(/_/g, ' ')}` : 'All sensor readings within expected operational range.');
+    const reasonText = isAnom
+      ? (backendEval.why_detected || backendEval.narrative_pack?.reason_narrative || `Anomaly flagged: ${rootCause.replace(/_/g, ' ')}`)
+      : 'All sensor readings within expected operational range.';
     const confidencePct = Math.round((backendEval.confidence ?? 0.95) * 100);
 
-    const isTempFlagged = isAnom && (rootCause.includes('temp') || Math.abs(temperature - 28.5) > 6.0);
-    const isPressFlagged = isAnom && (rootCause.includes('press') || Math.abs(pressure - 1012.0) > 10.0);
-    const isHumFlagged = isAnom && (rootCause.includes('humid') || Math.abs(humidity - 75.0) > 20.0);
+    const isTempFlagged = isAnom && (rootCause.includes('temp') || absTempDev > 6.0);
+    const isPressFlagged = isAnom && (rootCause.includes('press') || absPressDev > 10.0);
+    const isHumFlagged = isAnom && (rootCause.includes('humid') || absHumDev > 20.0);
 
     const shapFactors = (backendEval.contributing_factors && backendEval.contributing_factors.length > 0)
       ? backendEval.contributing_factors
       : [
-          { feature: 'temperature', shap_weight: 0.45, value: temperature, impact: isTempFlagged ? 'HIGH' : 'LOW', description: `Temperature observed at ${temperature.toFixed(1)}°C` },
-          { feature: 'pressure', shap_weight: 0.35, value: pressure, impact: isPressFlagged ? 'HIGH' : 'LOW', description: `Pressure observed at ${pressure.toFixed(1)} hPa` },
-          { feature: 'humidity', shap_weight: 0.20, value: humidity, impact: isHumFlagged ? 'HIGH' : 'LOW', description: `Humidity observed at ${humidity.toFixed(1)}%` }
+          { feature: 'temperature', shap_weight: isTempFlagged ? 0.65 : 0.15, value: Number(temperature.toFixed(1)), impact: isTempFlagged ? 'HIGH' : 'LOW', description: `${tempDelta >= 0 ? '+' : ''}${tempDelta.toFixed(1)}°C deviation from normal baseline` },
+          { feature: 'pressure', shap_weight: isPressFlagged ? 0.55 : 0.12, value: Number(pressure.toFixed(1)), impact: isPressFlagged ? 'HIGH' : 'LOW', description: `${pressDelta >= 0 ? '+' : ''}${pressDelta.toFixed(1)} hPa deviation from baseline` },
+          { feature: 'humidity', shap_weight: isHumFlagged ? 0.40 : 0.08, value: Number(humidity.toFixed(1)), impact: isHumFlagged ? 'HIGH' : 'LOW', description: `${humDelta >= 0 ? '+' : ''}${humDelta.toFixed(1)}% humidity shift` }
         ];
 
     return {
@@ -637,44 +698,33 @@ export function evaluateTier1Anomaly(
     };
   }
 
-  const BASE_TEMP = 28.5;
-  const BASE_PRESS = 1012.0;
-  const BASE_HUM = 75.0;
-
-  const tempDelta = temperature - BASE_TEMP;
-  const pressDelta = BASE_PRESS - pressure;
-  const humDelta = humidity - BASE_HUM;
-
-  const absTempDev = Math.abs(tempDelta);
-  const absPressDev = Math.abs(pressDelta);
-  const absHumDev = Math.abs(humDelta);
-
-  const tempIndex = absTempDev > 5.0 ? Math.min(1.0, (absTempDev - 5.0) / 10.0) : 0;
-  const pressIndex = absPressDev > 8.0 ? Math.min(1.0, (absPressDev - 8.0) / 15.0) : 0;
-  const humIndex = absHumDev > 18.0 ? Math.min(1.0, (absHumDev - 18.0) / 25.0) : 0;
+  // Fallback client-side calculation
+  const tempIndex = absTempDev > 5.0 ? Math.min(1.0, (absTempDev - 5.0) / 10.0) : (absTempDev / 30.0);
+  const pressIndex = absPressDev > 8.0 ? Math.min(1.0, (absPressDev - 8.0) / 15.0) : (absPressDev / 50.0);
+  const humIndex = absHumDev > 18.0 ? Math.min(1.0, (absHumDev - 18.0) / 25.0) : (absHumDev / 80.0);
 
   const isPhysOutOfBounds = temperature < -5 || temperature > 55 || pressure < 900 || pressure > 1060 || humidity < 0 || humidity > 100;
 
   let rawScore = Math.max(tempIndex * 0.45 + pressIndex * 0.40 + humIndex * 0.15, isPhysOutOfBounds ? 0.95 : 0);
-  if (injectedFaultType && injectedFaultType !== 'NONE') {
+  if (hasInjectedFault) {
     rawScore = Math.max(rawScore, 0.75);
   }
 
-  const anomalyScore = Number(Math.min(1.0, Math.max(0.0, rawScore)).toFixed(2));
+  const anomalyScore = Number(Math.min(1.0, Math.max(0.01, rawScore)).toFixed(2));
 
   let statusBadge: 'NORMAL' | 'WARNING / DRIFT' | 'CRITICAL ANOMALY' = 'NORMAL';
-  if (anomalyScore > 0.65) {
+  if (anomalyScore >= 0.65 || isPhysOutOfBounds) {
     statusBadge = 'CRITICAL ANOMALY';
-  } else if (anomalyScore >= 0.35) {
+  } else if (anomalyScore >= 0.35 || hasInjectedFault) {
     statusBadge = 'WARNING / DRIFT';
   }
 
-  const isTempFlagged = absTempDev > 6.0 || temperature > 40.0;
-  const isPressFlagged = absPressDev > 10.0 || pressure < 995.0;
-  const isHumFlagged = absHumDev > 22.0 || humidity > 95.0 || humidity < 25.0;
+  const isTempFlagged = statusBadge !== 'NORMAL' && (absTempDev > 6.0 || temperature > 40.0);
+  const isPressFlagged = statusBadge !== 'NORMAL' && (absPressDev > 10.0 || pressure < 995.0);
+  const isHumFlagged = statusBadge !== 'NORMAL' && (absHumDev > 22.0 || humidity > 95.0 || humidity < 25.0);
 
   let confidencePct = statusBadge === 'CRITICAL ANOMALY' ? 96 : (statusBadge === 'WARNING / DRIFT' ? 88 : 95);
-  let rootCause = injectedFaultType && injectedFaultType !== 'NONE' ? injectedFaultType : (isTempFlagged ? 'temperature_spike' : (isPressFlagged ? 'pressure_drop' : 'nominal'));
+  let rootCause: string = (hasInjectedFault && injectedFaultType ? injectedFaultType : (isTempFlagged ? 'temperature_spike' : (isPressFlagged ? 'pressure_drop' : 'nominal'))) || 'nominal';
   let reasonText = statusBadge !== 'NORMAL' ? `Sensor anomaly flagged: ${rootCause.replace(/_/g, ' ')}` : 'All sensor readings within expected operational range.';
 
   const shapT = absTempDev > 0 ? Number((tempDelta / 15.0).toFixed(3)) : 0.05;
@@ -743,12 +793,14 @@ export function evaluateTier2Risk(
   const compositeRiskScore = Math.round(maxScore);
 
   let compositeRiskLevel: 'LOW' | 'MODERATE' | 'HIGH' | 'SEVERE' = 'LOW';
-  if (compositeRiskScore >= 75 || (isTier1Crit && (tier1Eval?.anomalyScore || 0) > 0.8)) {
+  if (compositeRiskScore >= 75) {
     compositeRiskLevel = 'SEVERE';
-  } else if (compositeRiskScore >= 50 || isTier1Crit) {
+  } else if (compositeRiskScore >= 50) {
     compositeRiskLevel = 'HIGH';
-  } else if (compositeRiskScore >= 25 || tier1Eval?.statusBadge === 'WARNING / DRIFT') {
+  } else if (compositeRiskScore >= 25) {
     compositeRiskLevel = 'MODERATE';
+  } else {
+    compositeRiskLevel = 'LOW';
   }
 
   let threatAlert = 'Nominal weather context. No active environmental hazards detected in sector.';
@@ -765,6 +817,9 @@ export function evaluateTier2Risk(
     alertType = 'CRITICAL';
   } else if (compositeRiskScore >= 50) {
     threatAlert = `ELEVATED ENVIRONMENTAL RISK: Risk score at ${compositeRiskScore}%. Heightened alert for local weather hazards.`;
+    alertType = 'WARNING';
+  } else if (compositeRiskScore >= 25) {
+    threatAlert = `MODERATE RISK ADVISORY: Environmental parameters indicating moderate hazard conditions (${compositeRiskScore}%).`;
     alertType = 'WARNING';
   } else if (tier1Eval?.statusBadge === 'WARNING / DRIFT') {
     threatAlert = `SENSOR DRIFT ADVISORY: Sensor parameters displaying drift patterns. Re-evaluation in progress.`;
