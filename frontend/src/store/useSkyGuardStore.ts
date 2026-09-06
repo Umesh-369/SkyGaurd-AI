@@ -284,15 +284,17 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
     }
 
     try {
-      const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      const wsUrl = isLocalDev
-        ? `ws://${window.location.hostname}:8000/ws/readings`
-        : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/readings`;
+      const isSecure = window.location.protocol === 'https:';
+      const wsProtocol = isSecure ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProtocol}//${window.location.host}/ws/readings`;
       wsSocket = new WebSocket(wsUrl);
 
       wsSocket.onopen = () => {
         set({ wsConnected: true });
-        if (reconnectTimer) clearTimeout(reconnectTimer);
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
       };
 
       wsSocket.onmessage = (event) => {
@@ -438,7 +440,12 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
 
       wsSocket.onclose = () => {
         set({ wsConnected: false });
-        reconnectTimer = setTimeout(() => get().connectWebSocket(), 3000);
+        if (!reconnectTimer) {
+          reconnectTimer = setTimeout(() => {
+            reconnectTimer = null;
+            get().connectWebSocket();
+          }, 3000);
+        }
       };
 
       wsSocket.onerror = () => {
