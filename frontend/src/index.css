@@ -28,7 +28,7 @@ body {
   background-color: var(--surface-base);
   color: var(--text-heading);
   min-height: 100vh;
-  background-image: 
+  background-image:
     radial-gradient(circle at 50% 0%, rgba(2, 132, 199, 0.05) 0%, transparent 65%),
     radial-gradient(circle at 85% 30%, rgba(5, 150, 105, 0.04) 0%, transparent 55%),
     radial-gradient(circle at 15% 85%, rgba(99, 102, 241, 0.03) 0%, transparent 60%);
@@ -123,8 +123,17 @@ body {
 }
 
 @keyframes pulse-red-anim {
-  0%, 100% { opacity: 1; filter: drop-shadow(0 0 6px rgba(220, 38, 38, 0.6)); }
-  50% { opacity: 0.4; filter: drop-shadow(0 0 2px rgba(220, 38, 38, 0.2)); }
+
+  0%,
+  100% {
+    opacity: 1;
+    filter: drop-shadow(0 0 6px rgba(220, 38, 38, 0.6));
+  }
+
+  50% {
+    opacity: 0.4;
+    filter: drop-shadow(0 0 2px rgba(220, 38, 38, 0.2));
+  }
 }
 
 .pulse-cyan {
@@ -132,8 +141,17 @@ body {
 }
 
 @keyframes pulse-cyan-anim {
-  0%, 100% { opacity: 1; filter: drop-shadow(0 0 8px rgba(2, 132, 199, 0.6)); }
-  50% { opacity: 0.5; filter: drop-shadow(0 0 3px rgba(2, 132, 199, 0.2)); }
+
+  0%,
+  100% {
+    opacity: 1;
+    filter: drop-shadow(0 0 8px rgba(2, 132, 199, 0.6));
+  }
+
+  50% {
+    opacity: 0.5;
+    filter: drop-shadow(0 0 3px rgba(2, 132, 199, 0.2));
+  }
 }
 
 .pulse-emerald {
@@ -141,14 +159,23 @@ body {
 }
 
 @keyframes pulse-emerald-anim {
-  0%, 100% { opacity: 1; filter: drop-shadow(0 0 8px rgba(5, 150, 105, 0.6)); }
-  50% { opacity: 0.5; filter: drop-shadow(0 0 2px rgba(5, 150, 105, 0.2)); }
+
+  0%,
+  100% {
+    opacity: 1;
+    filter: drop-shadow(0 0 8px rgba(5, 150, 105, 0.6));
+  }
+
+  50% {
+    opacity: 0.5;
+    filter: drop-shadow(0 0 2px rgba(5, 150, 105, 0.2));
+  }
 }
 
 /* Tactical Background Grid */
 .bg-tactical-grid {
   background-size: 40px 40px;
-  background-image: 
+  background-image:
     linear-gradient(to right, rgba(226, 232, 240, 0.6) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(226, 232, 240, 0.6) 1px, transparent 1px);
 }
@@ -158,13 +185,16 @@ body {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: #f8fafc;
 }
+
 ::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 3px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: #0284c7;
 }
@@ -173,17 +203,20 @@ body {
   scrollbar-width: thin;
   scrollbar-color: #cbd5e1 transparent;
 }
+
 .custom-feed-scrollbar::-webkit-scrollbar {
   width: 5px;
 }
+
 .custom-feed-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
+
 .custom-feed-scrollbar::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 4px;
 }
+
 .custom-feed-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
-
