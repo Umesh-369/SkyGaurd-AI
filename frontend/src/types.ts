@@ -192,12 +192,17 @@ export interface RecommendedAction {
 export interface HistoricalReplayFrame {
   frame_index: number;
   station_id: string;
+  station_name?: string;
+  city?: string;
+  state?: string;
   timestamp: string;
   temperature: number;
   pressure: number;
   humidity: number;
   rainfall?: number;
   wind_speed?: number;
+  aqi?: number;
+  aqi_category?: string;
   dataset_source: string;
 }
 

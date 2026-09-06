@@ -21,12 +21,19 @@ import {
   Sparkles,
   RefreshCw,
   FastForward,
-  Pause
+  Pause,
+  Globe,
+  MapPin,
+  Wind,
+  Droplets,
+  Layers
 } from 'lucide-react';
 import { useSkyGuardStore } from '../store/useSkyGuardStore';
 import { HistoricalReplayFrame, SandboxEvaluationResult } from '../types';
 
 export type SandboxOperationalMode = 'LIVE' | 'HISTORICAL_REPLAY' | 'SIMULATION_SANDBOX';
+export type HistoricalDatasetType = 'ALL' | 'INDIAN_CLIMATE' | 'OPENML_GOA';
+export type StationFilterTab = 'ALL' | 'GOA' | 'INDIA';
 
 export const SimulatorStudio: React.FC = () => {
   const {
@@ -46,6 +53,8 @@ export const SimulatorStudio: React.FC = () => {
 
   // Sandbox Operational Mode State
   const [sandboxMode, setSandboxMode] = useState<SandboxOperationalMode>('LIVE');
+  const [selectedDataset, setSelectedDataset] = useState<HistoricalDatasetType>('ALL');
+  const [stationTab, setStationTab] = useState<StationFilterTab>('ALL');
 
   const [selectedStationId, setSelectedStationId] = useState<string>('AWS-01');
   const [selectedParam, setSelectedParam] = useState<string>('temperature');
@@ -68,11 +77,11 @@ export const SimulatorStudio: React.FC = () => {
     setTimeout(() => setNotification(null), 4000);
   };
 
-  // Fetch OpenML historical dataset frames when switching to Historical Replay mode
+  // Fetch historical dataset frames when mode, station, or dataset type changes
   useEffect(() => {
-    if (sandboxMode === 'HISTORICAL_REPLAY' && historicalFrames.length === 0) {
+    if (sandboxMode === 'HISTORICAL_REPLAY') {
       setLoadingReplay(true);
-      fetch(`/api/anomalies/historical/dataset-stream?station_id=${selectedStationId}&limit=100`)
+      fetch(`/api/anomalies/historical/dataset-stream?station_id=${selectedStationId}&dataset_type=${selectedDataset}&limit=200`)
         .then(res => res.json())
         .then(data => {
           if (data && Array.isArray(data.frames)) {
@@ -86,16 +95,17 @@ export const SimulatorStudio: React.FC = () => {
         .catch(err => console.warn('[SimulatorStudio] Historical fetch error:', err))
         .finally(() => setLoadingReplay(false));
     }
-  }, [sandboxMode, selectedStationId]);
+  }, [sandboxMode, selectedStationId, selectedDataset]);
 
   // Evaluate sandboxed frame through backend ML pipeline without writing to live feed
   const evaluateSandboxFrame = async (frame: Partial<HistoricalReplayFrame>) => {
     try {
+      const targetSt = frame.station_id || selectedStationId;
       const res = await fetch('/api/simulator/sandbox-evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          station_id: selectedStationId,
+          station_id: targetSt,
           temperature: frame.temperature ?? 28.5,
           pressure: frame.pressure ?? 1012.0,
           humidity: frame.humidity ?? 78.0,
@@ -116,7 +126,7 @@ export const SimulatorStudio: React.FC = () => {
   // Historical Replay Tick Loop
   useEffect(() => {
     if (isReplaying && historicalFrames.length > 0) {
-      const intervalMs = Math.max(200, 1000 / replaySpeed);
+      const intervalMs = Math.max(150, 1000 / replaySpeed);
       replayTimerRef.current = setInterval(() => {
         setReplayIndex(prev => {
           const next = prev + 1;
@@ -193,6 +203,7 @@ export const SimulatorStudio: React.FC = () => {
         }
 
         await evaluateSandboxFrame({
+          station_id: selectedStationId,
           temperature: simT,
           pressure: simP,
           humidity: simRH,
@@ -223,6 +234,14 @@ export const SimulatorStudio: React.FC = () => {
 
   const currentReplayFrame = historicalFrames[replayIndex];
 
+  // Filter stations based on selected tab
+  const filteredStations = stations.filter(st => {
+    const isGoa = st.station_id.startsWith('AWS-0') || st.station_id.includes('GA');
+    if (stationTab === 'GOA') return isGoa;
+    if (stationTab === 'INDIA') return !isGoa;
+    return true;
+  });
+
   return (
     <div className="space-y-8 pb-12 font-sans text-slate-900 select-none">
       
@@ -238,12 +257,12 @@ export const SimulatorStudio: React.FC = () => {
                 Virtual AWS Simulation Sandbox
               </h1>
               <p className="text-sky-700 text-xs font-mono font-bold mt-1">
-                14 STATIONS (OPENML GOA + 10 MAJOR INDIAN CITIES) · MULTI-MODE SIMULATION & REPLAY
+                14 STATIONS (OPENML GOA + 10 MAJOR INDIAN CITIES) · MULTI-SOURCE CLIMATE DATASETS & REPLAY
               </p>
             </div>
           </div>
           <p className="text-slate-600 text-xs sm:text-sm font-sans mt-3 max-w-3xl leading-relaxed">
-            Execute live hardware simulation streams, scrub historical OpenML climate data recordings, or run isolated controlled fault experiments through the real Tier 1 & Tier 2 ML pipeline without polluting live production feeds.
+            Execute live hardware simulation streams, scrub historical OpenML and All-India meteorological datasets across 14 stations, or run isolated controlled fault experiments through the real Tier 1 & Tier 2 ML pipeline without polluting live production feeds.
           </p>
         </div>
 
@@ -264,7 +283,7 @@ export const SimulatorStudio: React.FC = () => {
             onClick={() => { setSandboxMode('HISTORICAL_REPLAY'); }}
             className={`px-4 py-2.5 rounded-xl text-xs font-mono font-bold transition-all flex items-center space-x-2 cursor-pointer ${
               sandboxMode === 'HISTORICAL_REPLAY'
-                ? 'bg-blue-600 text-white shadow-md font-black'
+                ? 'bg-sky-600 text-white shadow-md font-black'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -275,7 +294,7 @@ export const SimulatorStudio: React.FC = () => {
             onClick={() => { setSandboxMode('SIMULATION_SANDBOX'); setIsReplaying(false); }}
             className={`px-4 py-2.5 rounded-xl text-xs font-mono font-bold transition-all flex items-center space-x-2 cursor-pointer ${
               sandboxMode === 'SIMULATION_SANDBOX'
-                ? 'bg-purple-600 text-white shadow-md font-black'
+                ? 'bg-indigo-600 text-white shadow-md font-black'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -290,22 +309,22 @@ export const SimulatorStudio: React.FC = () => {
         sandboxMode === 'LIVE'
           ? 'bg-emerald-50/80 border-emerald-300 text-emerald-900'
           : sandboxMode === 'HISTORICAL_REPLAY'
-          ? 'bg-blue-50/80 border-blue-300 text-blue-900'
-          : 'bg-purple-50/80 border-purple-300 text-purple-900'
+          ? 'bg-sky-50/80 border-sky-300 text-sky-900'
+          : 'bg-indigo-50/80 border-indigo-300 text-indigo-900'
       }`}>
         <div className="flex items-center space-x-3">
           <span className={`w-3.5 h-3.5 rounded-full animate-ping ${
-            sandboxMode === 'LIVE' ? 'bg-emerald-600' : sandboxMode === 'HISTORICAL_REPLAY' ? 'bg-blue-600' : 'bg-purple-600'
+            sandboxMode === 'LIVE' ? 'bg-emerald-600' : sandboxMode === 'HISTORICAL_REPLAY' ? 'bg-sky-600' : 'bg-indigo-600'
           }`} />
           <div>
             <span className="font-extrabold uppercase tracking-wider text-sm">
-              ACTIVE MODE: {sandboxMode === 'LIVE' ? 'LIVE CONTINUOUS HARDWARE STREAM' : sandboxMode === 'HISTORICAL_REPLAY' ? 'HISTORICAL OPENML REPLAY ENGINE' : 'ISOLATED SIMULATION SANDBOX'}
+              ACTIVE MODE: {sandboxMode === 'LIVE' ? 'LIVE CONTINUOUS HARDWARE STREAM' : sandboxMode === 'HISTORICAL_REPLAY' ? 'HISTORICAL MULTI-SOURCE REPLAY ENGINE' : 'ISOLATED SIMULATION SANDBOX'}
             </span>
             <p className="text-[11px] font-sans font-normal opacity-90">
               {sandboxMode === 'LIVE'
-                ? 'Broadcasting real-time hardware telemetry directly to Dashboard and Anomalies Feed.'
+                ? 'Broadcasting real-time hardware telemetry across all 14 stations directly to Dashboard and Anomalies Feed.'
                 : sandboxMode === 'HISTORICAL_REPLAY'
-                ? 'Stepping through actual OpenML Goa Dataset (43409) rows through the inference pipeline. Sandboxed from live feeds.'
+                ? 'Stepping through actual OpenML Goa (43409) and Indian National Climate datasets (10 Metros) through the ML inference pipeline.'
                 : 'Controlled fault experiments running isolated in memory. Live dashboard feeds remain completely undisturbed.'}
             </p>
           </div>
@@ -313,7 +332,7 @@ export const SimulatorStudio: React.FC = () => {
 
         {/* Master Controls: Start | Stop | Reset | Speed */}
         {sandboxMode === 'LIVE' && (
-          <div className="flex flex-wrap items-center gap-2 bg-white/80 p-2 rounded-xl border border-emerald-200 shadow-2xs">
+          <div className="flex flex-wrap items-center gap-2 bg-white/90 p-2 rounded-xl border border-emerald-200 shadow-2xs">
             <button
               onClick={handleStart}
               disabled={isSimulating || loadingAction === 'START'}
@@ -357,29 +376,34 @@ export const SimulatorStudio: React.FC = () => {
         )}
       </div>
 
-      {/* Historical Replay Player Controls Bar */}
+      {/* Historical Replay Player Controls Bar (Luxury Light Theme) */}
       {sandboxMode === 'HISTORICAL_REPLAY' && (
-        <div className="luxury-card p-6 bg-white border border-blue-200 shadow-sm space-y-4">
+        <div className="luxury-card p-6 bg-white border border-slate-200 shadow-sm space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
             <div className="flex items-center space-x-3">
-              <div className="p-2 rounded-xl bg-blue-50 text-blue-700 border border-blue-200">
+              <div className="p-2.5 rounded-xl bg-sky-50 text-sky-700 border border-sky-200">
                 <History className="w-5 h-5" />
               </div>
               <div>
                 <h3 className="font-extrabold text-sm text-slate-900 font-display uppercase tracking-wider">
-                  OpenML Goa Historical Dataset Player (Dataset 43409)
+                  Historical Climate Dataset Player
                 </h3>
-                <span className="text-[11px] font-mono text-slate-500">
-                  FRAME {replayIndex + 1} OF {historicalFrames.length || '100'} · SOURCE: OPENML 43409
-                </span>
+                <div className="flex items-center space-x-2 mt-0.5">
+                  <span className="text-[11px] font-mono font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
+                    FRAME {replayIndex + 1} OF {historicalFrames.length || '200'}
+                  </span>
+                  <span className="text-[11px] font-mono text-slate-500">
+                    SOURCE: {currentReplayFrame?.dataset_source || (selectedDataset === 'INDIAN_CLIMATE' ? 'Indian National Climate Dataset (2024–2025)' : 'OpenML 43409')}
+                  </span>
+                </div>
               </div>
             </div>
 
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 flex-wrap gap-y-2">
               <button
                 onClick={() => setIsReplaying(!isReplaying)}
                 className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center space-x-1.5 cursor-pointer shadow-sm ${
-                  isReplaying ? 'bg-amber-600 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  isReplaying ? 'bg-amber-600 text-white' : 'bg-sky-600 hover:bg-sky-700 text-white'
                 }`}
               >
                 {isReplaying ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
@@ -387,7 +411,7 @@ export const SimulatorStudio: React.FC = () => {
               </button>
               <button
                 onClick={() => { setReplayIndex(0); if (historicalFrames.length > 0) evaluateSandboxFrame(historicalFrames[0]); }}
-                className="p-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700 cursor-pointer"
+                className="p-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700 cursor-pointer border border-slate-200"
                 title="Restart from frame 0"
               >
                 <RotateCcw className="w-4 h-4" />
@@ -399,7 +423,7 @@ export const SimulatorStudio: React.FC = () => {
                     key={spd}
                     onClick={() => setReplaySpeed(spd)}
                     className={`px-2 py-1 rounded text-xs font-mono font-bold cursor-pointer ${
-                      replaySpeed === spd ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
+                      replaySpeed === spd ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
                     }`}
                   >
                     {spd}×
@@ -409,11 +433,62 @@ export const SimulatorStudio: React.FC = () => {
             </div>
           </div>
 
+          {/* Dataset Selector Tabs */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-mono font-bold text-slate-500 uppercase">Dataset Source:</span>
+              <button
+                onClick={() => setSelectedDataset('ALL')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+                  selectedDataset === 'ALL'
+                    ? 'bg-sky-600 text-white shadow-xs font-black'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                }`}
+              >
+                🌐 All Datasets (India + Goa)
+              </button>
+              <button
+                onClick={() => setSelectedDataset('INDIAN_CLIMATE')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+                  selectedDataset === 'INDIAN_CLIMATE'
+                    ? 'bg-indigo-600 text-white shadow-xs font-black'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                }`}
+              >
+                🇮🇳 Indian National Climate (10 Metros)
+              </button>
+              <button
+                onClick={() => setSelectedDataset('OPENML_GOA')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+                  selectedDataset === 'OPENML_GOA'
+                    ? 'bg-blue-600 text-white shadow-xs font-black'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                }`}
+              >
+                🌴 OpenML Goa Dataset 43409
+              </button>
+            </div>
+
+            {loadingReplay && (
+              <span className="text-[11px] font-mono text-sky-700 flex items-center space-x-1.5 animate-pulse">
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                <span>Loading Dataset Frames...</span>
+              </span>
+            )}
+          </div>
+
           {/* Timeline Scrubber */}
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-[11px] font-mono text-slate-500">
-              <span>Timestamp: {currentReplayFrame?.timestamp ? new Date(currentReplayFrame.timestamp).toLocaleString() : '—'}</span>
-              <span>Scrub Historical Timeline</span>
+          <div className="space-y-1.5 pt-2">
+            <div className="flex justify-between text-[11px] font-mono text-slate-600">
+              <span className="flex items-center space-x-2">
+                <span>Timestamp: <strong>{currentReplayFrame?.timestamp ? new Date(currentReplayFrame.timestamp).toLocaleString() : '—'}</strong></span>
+                {currentReplayFrame?.city && (
+                  <span className="text-sky-700 font-bold bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
+                    📍 {currentReplayFrame.city}, {currentReplayFrame.state} ({currentReplayFrame.station_id})
+                  </span>
+                )}
+              </span>
+              <span className="text-slate-500 font-bold">Scrub Historical Timeline ({replayIndex + 1}/{historicalFrames.length})</span>
             </div>
             <input
               type="range"
@@ -425,59 +500,75 @@ export const SimulatorStudio: React.FC = () => {
                 setReplayIndex(idx);
                 if (historicalFrames[idx]) evaluateSandboxFrame(historicalFrames[idx]);
               }}
-              className="w-full accent-blue-600 cursor-pointer h-2 bg-slate-200 rounded-lg"
+              className="w-full accent-sky-600 cursor-pointer h-2 bg-slate-200 rounded-lg"
             />
           </div>
         </div>
       )}
 
-      {/* Sandbox Live Inference Inspection Card (When in Replay or Sandbox Mode) */}
+      {/* Sandbox Live Inference Inspection Card (Crisp Luxury Light Theme) */}
       {(sandboxMode === 'HISTORICAL_REPLAY' || sandboxMode === 'SIMULATION_SANDBOX') && sandboxEvaluation && (
-        <div className="luxury-card p-6 bg-slate-900 text-white border border-slate-800 shadow-xl space-y-4 font-mono">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-3 gap-2">
-            <div className="flex items-center space-x-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-ping"></span>
-              <span className="font-extrabold text-xs text-sky-400 uppercase tracking-wider">
-                REAL-TIME SANDBOX INFERENCE PIPELINE OUTPUT
+        <div className="luxury-card p-6 bg-white text-slate-900 border border-slate-200 shadow-sm space-y-4 font-mono">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-2">
+            <div className="flex items-center space-x-2.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-ping"></span>
+              <span className="font-extrabold text-xs text-indigo-700 uppercase tracking-wider font-sans">
+                Real-Time Sandbox ML Inference Output
               </span>
             </div>
-            <span className="text-[10px] text-slate-400 bg-slate-800 px-2.5 py-1 rounded-full">
-              STRICTLY ISOLATED · ZERO PRODUCTION WRITE
-            </span>
+            <div className="flex items-center space-x-2 flex-wrap">
+              <span className="text-[10px] font-mono font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200">
+                STRICTLY ISOLATED · ZERO PRODUCTION WRITE
+              </span>
+              {currentReplayFrame?.city && (
+                <span className="text-[10px] font-mono font-bold text-sky-700 bg-sky-50 px-2.5 py-1 rounded-full border border-sky-200">
+                  📍 {currentReplayFrame.city}, {currentReplayFrame.state}
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-            <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700">
-              <span className="text-[10px] text-slate-400 block">TEMPERATURE</span>
-              <strong className="text-white text-sm">{sandboxEvaluation.readings?.temperature?.toFixed(2)} °C</strong>
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 shadow-2xs">
+              <span className="text-[10px] font-bold text-slate-500 block uppercase">TEMPERATURE</span>
+              <strong className="text-slate-900 text-base font-extrabold">{sandboxEvaluation.readings?.temperature?.toFixed(2)} °C</strong>
             </div>
-            <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700">
-              <span className="text-[10px] text-slate-400 block">PRESSURE</span>
-              <strong className="text-white text-sm">{sandboxEvaluation.readings?.pressure?.toFixed(1)} hPa</strong>
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 shadow-2xs">
+              <span className="text-[10px] font-bold text-slate-500 block uppercase">PRESSURE</span>
+              <strong className="text-slate-900 text-base font-extrabold">{sandboxEvaluation.readings?.pressure?.toFixed(1)} hPa</strong>
             </div>
-            <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700">
-              <span className="text-[10px] text-slate-400 block">HUMIDITY</span>
-              <strong className="text-white text-sm">{sandboxEvaluation.readings?.humidity?.toFixed(1)} %</strong>
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 shadow-2xs">
+              <span className="text-[10px] font-bold text-slate-500 block uppercase">HUMIDITY</span>
+              <strong className="text-slate-900 text-base font-extrabold">{sandboxEvaluation.readings?.humidity?.toFixed(1)} %</strong>
             </div>
-            <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700">
-              <span className="text-[10px] text-slate-400 block">ML DETECTION VERDICT</span>
-              <strong className={sandboxEvaluation.detection?.is_anomaly ? 'text-red-400' : 'text-emerald-400'}>
-                {sandboxEvaluation.detection?.is_anomaly ? 'FLAGGED ANOMALY' : 'NORMAL / NOMINAL'}
+            <div className={`p-3.5 rounded-xl border shadow-2xs ${
+              sandboxEvaluation.detection?.is_anomaly 
+                ? 'bg-red-50/90 border-red-200 text-red-800' 
+                : 'bg-emerald-50/90 border-emerald-200 text-emerald-800'
+            }`}>
+              <span className="text-[10px] font-bold block uppercase opacity-80">ML DETECTION VERDICT</span>
+              <strong className="text-sm font-black flex items-center space-x-1.5 mt-0.5">
+                <span>{sandboxEvaluation.detection?.is_anomaly ? '⚠️ FLAGGED ANOMALY' : '✓ NORMAL / NOMINAL'}</span>
               </strong>
             </div>
           </div>
 
           {/* Real Live SHAP Breakdown in Sandbox */}
           {sandboxEvaluation.contributing_factors && sandboxEvaluation.contributing_factors.length > 0 && (
-            <div className="p-3.5 bg-slate-800/50 rounded-xl border border-slate-700 space-y-2">
-              <span className="text-[10px] font-bold text-sky-400 block uppercase">
-                SHAP Contributing Factors Breakdown:
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+            <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-200 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-700 block uppercase font-sans">
+                  SHAP Contributing Factors Breakdown:
+                </span>
+                <span className="text-[10px] text-slate-500 font-mono">KernelExplainer Feature Weights</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
                 {sandboxEvaluation.contributing_factors.slice(0, 3).map((f, i) => (
-                  <div key={i} className="flex justify-between p-2 bg-slate-800 rounded border border-slate-700/60">
-                    <span className="text-slate-300">{f.feature}:</span>
-                    <span className={f.shap_weight > 0 ? 'text-red-400 font-bold' : 'text-blue-400 font-bold'}>
+                  <div key={i} className="flex justify-between items-center p-2.5 bg-white rounded-lg border border-slate-200 shadow-2xs">
+                    <span className="text-slate-700 font-mono font-semibold">{f.feature}:</span>
+                    <span className={`font-mono font-extrabold px-1.5 py-0.5 rounded text-xs ${
+                      f.shap_weight > 0 ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-sky-50 text-sky-600 border border-sky-100'
+                    }`}>
                       {f.shap_weight > 0 ? `+${f.shap_weight.toFixed(3)}` : f.shap_weight.toFixed(3)}
                     </span>
                   </div>
@@ -485,6 +576,26 @@ export const SimulatorStudio: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* Spatio-Temporal Imputation & Tier-2 Hazard Indicators in Sandbox */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 text-xs">
+            {sandboxEvaluation.imputed_suggestion && (
+              <div className="p-3 bg-sky-50/70 border border-sky-200 rounded-xl flex items-center justify-between">
+                <span className="text-sky-900 font-sans text-[11px] font-bold">Imputed Value Correction:</span>
+                <span className="font-mono font-bold text-sky-800">
+                  {sandboxEvaluation.imputed_suggestion.target_feature} → {sandboxEvaluation.imputed_suggestion.corrected_value}
+                </span>
+              </div>
+            )}
+            {sandboxEvaluation.disaster_risks && (
+              <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl flex items-center justify-between">
+                <span className="text-indigo-900 font-sans text-[11px] font-bold">Tier-2 Hazard Score:</span>
+                <span className="font-mono font-bold text-indigo-800">
+                  {sandboxEvaluation.disaster_risks.composite_risk_score} / 100 ({sandboxEvaluation.disaster_risks.composite_risk_level})
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -511,6 +622,8 @@ export const SimulatorStudio: React.FC = () => {
           </span>
           <span className="text-slate-400">|</span>
           <span className="text-sky-700 font-bold">CADENCE: {simSpeed}× REALTIME</span>
+          <span className="text-slate-400">|</span>
+          <span className="text-slate-600 font-bold">STATIONS: 14 TOTAL</span>
         </div>
         <div className="flex items-center space-x-2">
           <button
@@ -523,14 +636,51 @@ export const SimulatorStudio: React.FC = () => {
         </div>
       </div>
 
+      {/* Station Filter Tabs */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center space-x-2">
+          <Layers className="w-4 h-4 text-sky-700" />
+          <h3 className="font-extrabold text-sm text-slate-900 font-display uppercase tracking-wider">
+            Station Network Topology ({stations.length} Active AWS Nodes)
+          </h3>
+        </div>
+        <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200">
+          <button
+            onClick={() => setStationTab('ALL')}
+            className={`px-3 py-1 rounded-lg text-xs font-mono font-bold cursor-pointer transition-all ${
+              stationTab === 'ALL' ? 'bg-white text-sky-700 shadow-2xs font-extrabold' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            All 14 Stations
+          </button>
+          <button
+            onClick={() => setStationTab('GOA')}
+            className={`px-3 py-1 rounded-lg text-xs font-mono font-bold cursor-pointer transition-all ${
+              stationTab === 'GOA' ? 'bg-white text-sky-700 shadow-2xs font-extrabold' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Goa Stations (4)
+          </button>
+          <button
+            onClick={() => setStationTab('INDIA')}
+            className={`px-3 py-1 rounded-lg text-xs font-mono font-bold cursor-pointer transition-all ${
+              stationTab === 'INDIA' ? 'bg-white text-sky-700 shadow-2xs font-extrabold' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            National Metros (10)
+          </button>
+        </div>
+      </div>
+
       {/* Active AWS Node Network Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stations.map((st) => {
+        {filteredStations.map((st) => {
           const liveR = liveReadings.find(r => r.station_id === st.station_id || r.station_id === st.id);
           const temp = liveR?.temperature ?? st.last_reading?.temperature;
           const press = liveR?.pressure ?? st.last_reading?.pressure;
           const humid = liveR?.humidity ?? st.last_reading?.humidity;
           const isAnom = liveR?.anomaly_evaluation?.is_anomaly;
+          const isGoa = st.station_id.startsWith('AWS-0') || st.station_id.includes('GA');
 
           return (
             <div
@@ -547,7 +697,12 @@ export const SimulatorStudio: React.FC = () => {
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center space-x-2">
                   <div className={`w-2.5 h-2.5 rounded-full ${isSimulating ? (isAnom ? 'bg-red-500 pulse-red' : 'bg-emerald-500 pulse-emerald') : 'bg-amber-500'}`}></div>
-                  <h4 className="font-extrabold text-sm text-slate-900 font-display uppercase tracking-wider">{st.name}</h4>
+                  <div>
+                    <h4 className="font-extrabold text-sm text-slate-900 font-display uppercase tracking-wider">{st.name}</h4>
+                    <span className="text-[10px] font-mono text-slate-500 block">
+                      {isGoa ? 'Goa Coastal Zone' : 'National IMD Grid'}
+                    </span>
+                  </div>
                 </div>
                 <span className="text-[10px] font-mono font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
                   {st.station_id}
@@ -600,11 +755,20 @@ export const SimulatorStudio: React.FC = () => {
               onChange={(e) => setSelectedStationId(e.target.value)}
               className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 focus:border-sky-600 focus:outline-none cursor-pointer"
             >
-              {stations.map(st => (
-                <option key={st.station_id} value={st.station_id} className="bg-white text-slate-900">
-                  {st.name} ({st.station_id})
-                </option>
-              ))}
+              <optgroup label="Goa Stations (4)">
+                {stations.filter(s => s.station_id.startsWith('AWS-0') || s.station_id.includes('GA')).map(st => (
+                  <option key={st.station_id} value={st.station_id} className="bg-white text-slate-900">
+                    {st.name} ({st.station_id})
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="National Indian Metros (10)">
+                {stations.filter(s => !(s.station_id.startsWith('AWS-0') || s.station_id.includes('GA'))).map(st => (
+                  <option key={st.station_id} value={st.station_id} className="bg-white text-slate-900">
+                    {st.name} ({st.station_id})
+                  </option>
+                ))}
+              </optgroup>
             </select>
           </div>
 

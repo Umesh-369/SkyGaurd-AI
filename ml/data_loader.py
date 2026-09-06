@@ -80,6 +80,43 @@ class OpenMLDataLoader:
         })
         return df
 
+    def fetch_raw_indian_climate_dataset(self) -> Optional[pd.DataFrame]:
+        """
+        Loads the raw Indian National Climate Dataset (2024-2025) with city, state, temperature, humidity,
+        pressure, rainfall, wind_speed, and AQI for Historical Replay across Indian cities.
+        """
+        found_path = None
+        for path in LOCAL_DATASET_PATHS:
+            if os.path.exists(path):
+                found_path = path
+                break
+
+        if not found_path:
+            return None
+
+        try:
+            df = pd.read_csv(found_path)
+            col_map = {
+                "Date": "timestamp",
+                "City": "city",
+                "State": "state",
+                "Temperature_Avg (°C)": "temperature",
+                "Temperature_Max (°C)": "temp_max",
+                "Temperature_Min (°C)": "temp_min",
+                "Humidity (%)": "humidity",
+                "Rainfall (mm)": "rainfall",
+                "Wind_Speed (km/h)": "wind_speed",
+                "Pressure (hPa)": "pressure",
+                "AQI": "aqi",
+                "AQI_Category": "aqi_category",
+                "Cloud_Cover (%)": "cloud_cover"
+            }
+            df = df.rename(columns=col_map)
+            return df
+        except Exception as e:
+            print(f"[DataLoader] Error reading raw Indian Climate dataset: {e}")
+            return None
+
     def fetch_local_indian_dataset(self) -> Tuple[Optional[pd.DataFrame], List[str]]:
         """
         Loads the secondary Local Indian Climate Dataset (2024-2025).
