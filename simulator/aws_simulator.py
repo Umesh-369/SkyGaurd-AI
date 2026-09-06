@@ -361,7 +361,12 @@ class VirtualAWSSimulator:
 
         return {"status": "success", "message": "Cleared all active fault injections."}
 
-    def generate_reading(self, station_id: str, current_time: Optional[datetime.datetime] = None) -> Optional[Dict[str, Any]]:
+    def generate_reading(
+        self,
+        station_id: str,
+        current_time: Optional[datetime.datetime] = None,
+        force_regenerate: bool = False
+    ) -> Optional[Dict[str, Any]]:
         if station_id == "AWS-IND-DEL" or station_id == "DELHI":
             station_id = "AWS-01"
         matched_id = None
@@ -376,7 +381,8 @@ class VirtualAWSSimulator:
         if not matched_id:
             return None
 
-        if not self.is_running and matched_id in self.latest_readings_cache:
+        # Return cached paused snapshot ONLY if simulation is stopped AND no fault was freshly injected AND force_regenerate is False
+        if not self.is_running and matched_id in self.latest_readings_cache and not force_regenerate and matched_id not in self.active_injections:
             cached = self.latest_readings_cache[matched_id].copy()
             cached["is_paused_snapshot"] = True
             return cached
