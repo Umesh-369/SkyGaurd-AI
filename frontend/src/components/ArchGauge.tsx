@@ -151,35 +151,37 @@ export const ArchGauge: React.FC<ArchGaugeProps> = ({
         {progress > 0.02 && (
           <g>
             {/* Outer Radiating Pulse Aura */}
-            <motion.circle
+            <circle
               cx={beaconX}
               cy={beaconY}
-              initial={{ cx: beaconX, cy: beaconY }}
-              animate={{
-                cx: beaconX,
-                cy: beaconY,
-                r: isCritical ? [7, 11, 7] : isWarn ? [6, 10, 6] : [5, 8, 5],
-                opacity: isCritical ? [0.4, 0.8, 0.4] : [0.3, 0.6, 0.3]
-              }}
-              transition={{
-                cx: { duration: 0.85, ease: [0.16, 1, 0.3, 1] },
-                cy: { duration: 0.85, ease: [0.16, 1, 0.3, 1] },
-                r: { repeat: Infinity, duration: 1.6, ease: 'easeInOut' },
-                opacity: { repeat: Infinity, duration: 1.6, ease: 'easeInOut' }
-              }}
+              r={isCritical ? 7 : isWarn ? 6 : 5}
               fill={strokeColor}
-            />
+              opacity={isCritical ? 0.6 : 0.4}
+              style={{ transition: 'cx 0.85s cubic-bezier(0.16, 1, 0.3, 1), cy 0.85s cubic-bezier(0.16, 1, 0.3, 1)' }}
+            >
+              <animate
+                attributeName="r"
+                values={isCritical ? "7;11;7" : isWarn ? "6;10;6" : "5;8;5"}
+                dur="1.6s"
+                repeatCount="indefinite"
+              />
+              <animate
+                attributeName="opacity"
+                values={isCritical ? "0.4;0.8;0.4" : "0.3;0.6;0.3"}
+                dur="1.6s"
+                repeatCount="indefinite"
+              />
+            </circle>
+
             {/* Crisp Solid Beacon Core */}
-            <motion.circle
+            <circle
               cx={beaconX}
               cy={beaconY}
-              initial={{ cx: beaconX, cy: beaconY }}
-              animate={{ cx: beaconX, cy: beaconY }}
-              transition={{ duration: 0.85, ease: [0.16, 1, 0.3, 1] }}
               r="4"
               fill="#ffffff"
               stroke={strokeColor}
               strokeWidth="2.5"
+              style={{ transition: 'cx 0.85s cubic-bezier(0.16, 1, 0.3, 1), cy 0.85s cubic-bezier(0.16, 1, 0.3, 1)' }}
             />
           </g>
         )}
