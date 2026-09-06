@@ -2,7 +2,6 @@ import React from 'react';
 import { 
   ShieldCheck, 
   Home, 
-  Radio, 
   AlertTriangle, 
   ShieldAlert, 
   Sliders, 
@@ -30,12 +29,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, activ
 
   const menuItems = [
     { id: 'dashboard', label: 'Overview', icon: Home },
-    { id: 'stations', label: 'Stations', icon: Radio },
     { id: 'anomalies', label: 'Anomalies', icon: Bell, badge: activeAlertCount },
     { id: 'disaster-risk', label: 'Risk Intelligence', icon: ShieldAlert },
     { id: 'simulator', label: 'Simulator Studio', icon: Sliders },
     { id: 'analytics', label: 'Live Analytics', icon: BarChart3 },
-    { id: 'alerts', label: 'Alerts', icon: AlertTriangle },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
@@ -68,10 +65,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, activ
               <button
                 key={item.id}
                 onClick={() => {
-                  if (item.id === 'overview' || item.id === 'dashboard' || item.id === 'stations') {
+                  if (item.id === 'overview' || item.id === 'dashboard') {
                     setActiveTab('dashboard');
-                  } else if (item.id === 'alerts') {
-                    setActiveTab('anomalies');
                   } else {
                     setActiveTab(item.id);
                   }
