@@ -5,9 +5,7 @@ import {
   ShieldAlert, 
   Sliders, 
   BarChart3, 
-  Bell, 
-  Box, 
-  Layers
+  Bell
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useSkyGuardStore, getCanonicalStationName } from '../store/useSkyGuardStore';
@@ -132,21 +130,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Right Controls & Status Bar */}
       <div className="flex items-center space-x-4">
         
-        {setIs3DMode && (
-          <button
-            onClick={() => setIs3DMode(!is3DMode)}
-            className={`hidden xl:flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-mono font-bold border transition-all ${
-              is3DMode
-                ? 'bg-sky-50 text-sky-700 border-sky-300 shadow-sm'
-                : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
-            }`}
-            title="Toggle Spatial Map Renderer"
-          >
-            {is3DMode ? <Box className="w-3.5 h-3.5 text-sky-600" /> : <Layers className="w-3.5 h-3.5 text-slate-500" />}
-            <span>{is3DMode ? '3D RADAR' : '2D RADAR'}</span>
-          </button>
-        )}
-
         {/* System Online Badge */}
         <div className="flex items-center space-x-2 px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full text-xs font-mono font-bold">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
