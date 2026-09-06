@@ -8,7 +8,6 @@
 [![Kaggle Dataset](https://img.shields.io/badge/Kaggle-Indian%20Climate%20Dataset%202024--2025-20BEFF?style=for-the-badge&logo=kaggle)](https://www.kaggle.com/datasets/ankushnarwade/indian-climate-dataset-20242025)
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI%20%7C%20Python%203.11-009688?style=for-the-badge&logo=fastapi)](backend/)
 [![React](https://img.shields.io/badge/Frontend-React%2018%20%7C%20Vite%20%7C%20Tailwind-61DAFB?style=for-the-badge&logo=react)](frontend/)
-[![Edge AI](https://img.shields.io/badge/Edge%20AI-Quantized%20ONNX%20%7C%20ESP32-f59e0b?style=for-the-badge&logo=cpu)](ml/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 
 <br/>
