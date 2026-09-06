@@ -23,26 +23,35 @@ class DisasterRiskEngine:
         Calculates risk scores (0 to 100%), risk levels (LOW, MEDIUM, HIGH, CRITICAL),
         and contributing factor explanations for 4 hazard categories.
         """
-        temp = validated_sensor_data.get("temperature", 28.5)
-        press = validated_sensor_data.get("pressure", 1012.0)
-        humid = validated_sensor_data.get("humidity", 78.0)
+        temp = float(validated_sensor_data.get("temperature", 28.5))
+        press = float(validated_sensor_data.get("pressure", 1012.0))
+        humid = float(validated_sensor_data.get("humidity", 78.0))
 
-        rain_mm = weather_api_data.get("rainfall_mm", 0.0)
-        wind_kmh = weather_api_data.get("wind_speed_kmh", 12.0)
+        # Read rainfall and wind speed from either weather API feed or validated sensor stream
+        rain_api = weather_api_data.get("rainfall_mm") if weather_api_data else None
+        rain_sensor = validated_sensor_data.get("rainfall") or validated_sensor_data.get("rainfall_mm")
+        rain_mm = float(rain_api if rain_api is not None and rain_api > 0 else (rain_sensor if rain_sensor is not None else 0.0))
+
+        wind_api = weather_api_data.get("wind_speed_kmh") if weather_api_data else None
+        wind_sensor = validated_sensor_data.get("wind_speed") or validated_sensor_data.get("wind_speed_kmh")
+        wind_kmh = float(wind_api if wind_api is not None and wind_api > 0 else (wind_sensor if wind_sensor is not None else 12.0))
 
         # 1. Flood & Heavy Rainfall Risk
-        # High rainfall + high humidity + low barometric pressure -> Flood threat
-        flood_score = min(100.0, (rain_mm * 2.5) + (max(0, humid - 70.0) * 0.4) + (max(0, 1010.0 - press) * 1.5))
+        # Combines active rainfall rate, moisture saturation index, and barometric depression
+        moisture_component = max(0.0, (humid - 50.0) * 0.35)
+        pressure_depression = max(0.0, (1013.25 - press) * 1.5)
+        rain_component = rain_mm * 3.2
+        flood_score = min(100.0, max(0.0, round(rain_component + moisture_component + pressure_depression, 1)))
         flood_level = self._get_risk_level(flood_score)
 
         # 2. Heatwave Risk
-        # Temperature > 35°C + high humidity -> Extreme Heat Stress
-        heatwave_score = min(100.0, max(0.0, (temp - 30.0) * 8.5) + (humid * 0.2))
+        # Temperature > 30°C + humidity -> Extreme Heat Stress
+        heatwave_score = min(100.0, max(0.0, round((temp - 30.0) * 8.5 + (humid * 0.2), 1)))
         heatwave_level = self._get_risk_level(heatwave_score)
 
         # 3. Cyclone & Storm Surge Risk
-        # Rapid barometric pressure drop (< 995 hPa) + strong winds (> 45 km/h) -> Storm surge
-        cyclone_score = min(100.0, max(0.0, (1010.0 - press) * 4.0) + (wind_kmh * 1.2))
+        # Rapid barometric pressure drop (< 1010 hPa) + strong winds (> 15 km/h) -> Storm surge
+        cyclone_score = min(100.0, max(0.0, round(max(0.0, (1010.0 - press) * 4.0) + (wind_kmh * 1.2), 1)))
         cyclone_level = self._get_risk_level(cyclone_score)
 
         # Overall composite weather hazard index
