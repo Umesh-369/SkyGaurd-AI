@@ -177,3 +177,45 @@ export interface AlertItem {
   status: 'ACTIVE' | 'ACKNOWLEDGED' | 'RESOLVED';
   cooldown_active: boolean;
 }
+
+export interface RecommendedAction {
+  id: string;
+  priority: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  action: string;
+  reason: string;
+  evidence_basis: string;
+  suggested_owner: string;
+  estimated_resolution_time: string;
+  is_safety_critical: boolean;
+}
+
+export interface HistoricalReplayFrame {
+  frame_index: number;
+  station_id: string;
+  timestamp: string;
+  temperature: number;
+  pressure: number;
+  humidity: number;
+  rainfall?: number;
+  wind_speed?: number;
+  dataset_source: string;
+}
+
+export interface SandboxEvaluationResult {
+  status: string;
+  station_id: string;
+  timestamp: string;
+  readings: {
+    temperature: number;
+    pressure: number;
+    humidity: number;
+    wind_speed: number;
+    rainfall: number;
+  };
+  detection: AnomalyEvaluation;
+  contributing_factors: SHAPFactor[];
+  imputed_suggestion?: ImputedSuggestion;
+  disaster_risks: DisasterRiskSummary;
+  is_sandboxed: boolean;
+}
+

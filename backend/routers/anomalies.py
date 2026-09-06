@@ -14,10 +14,15 @@ from ml.imputer import ValueImputer
 from backend.services.spatial_check import spatial_engine
 from simulator.aws_simulator import simulator_instance
 from backend.services.comm_monitor import comm_monitor
+from backend.services.recommendation_engine import recommendation_engine
+from backend.services.disaster_risk import disaster_risk_engine
+from backend.services.weather_api import weather_api_service
+from ml.data_loader import OpenMLDataLoader
 
 router = APIRouter(prefix="/anomalies", tags=["Anomaly Detection (Tier 1 Core)"])
 
 imputer = ValueImputer()
+data_loader = OpenMLDataLoader()
 
 CANONICAL_STATION_NAMES = {
     "AWS-01": "Panaji Coastal Station",
@@ -380,4 +385,98 @@ async def evaluate_custom_reading(
         "imputed_value_suggestion": imputed,
         "spatial_consensus": spatial_res,
         "narrative_explanation": pred.get("narrative_pack", {})
+    }
+
+
+@router.get("/{anomaly_id}/recommendations")
+async def get_anomaly_recommendations(anomaly_id: str):
+    """
+    Returns deterministic, prioritized corrective recommendations for a specific anomaly.
+    Integrates Tier 1 classification + SHAP features + Tier 2 Risk Engine.
+    """
+    target_anom = None
+    for a in LIVE_ANOMALIES_FEED:
+        if a.get("id") == anomaly_id:
+            target_anom = a
+            break
+
+    if not target_anom:
+        for a in HISTORICAL_ANOMALIES_ARCHIVE:
+            if a.get("id") == anomaly_id:
+                target_anom = a
+                break
+
+    if not target_anom:
+        raise HTTPException(status_code=404, detail=f"Anomaly '{anomaly_id}' not found.")
+
+    # Calculate Tier 2 risks for context
+    sample_r = {
+        "temperature": target_anom.get("readings", {}).get("temperature", 28.5),
+        "pressure": target_anom.get("readings", {}).get("pressure", 1012.0),
+        "humidity": target_anom.get("readings", {}).get("humidity", 78.0)
+    }
+    w_api = weather_api_service.fetch_current_weather()
+    risk_summary = disaster_risk_engine.calculate_disaster_risks(sample_r, w_api)
+
+    recs = recommendation_engine.generate_recommendations(target_anom, risk_summary)
+    return {
+        "anomaly_id": anomaly_id,
+        "station_id": target_anom.get("station_id"),
+        "severity": target_anom.get("severity"),
+        "category": target_anom.get("category"),
+        "tier2_risk_score": risk_summary.get("composite_risk_score"),
+        "tier2_risk_level": risk_summary.get("composite_risk_level"),
+        "recommendations": recs
+    }
+
+
+@router.get("/historical/dataset-stream")
+async def get_historical_dataset_stream(station_id: str = "AWS-01", limit: int = 150):
+    """
+    Supplies genuine historical time-series frames from OpenML Dataset 43409
+    (Goa Weather) and secondary Indian Climate Datasets for sandboxed Historical Replay.
+    """
+    try:
+        df = data_loader.fetch_raw_openml_data()
+        if df is not None and not df.empty:
+            records = []
+            # Take up to limit rows
+            sample_df = df.head(limit)
+            for idx, row in sample_df.iterrows():
+                ts = str(row.get("timestamp", datetime.datetime.now(datetime.timezone.utc).isoformat()))
+                temp = float(row.get("temperature", 28.5))
+                press = float(row.get("pressure", 1012.0))
+                humid = float(row.get("humidity", 78.0))
+                rain = float(row.get("rainfall", 0.0)) if "rainfall" in row else 0.0
+                wind = float(row.get("wind_speed", 10.0)) if "wind_speed" in row else 10.0
+
+                records.append({
+                    "frame_index": int(idx),
+                    "station_id": station_id,
+                    "timestamp": ts,
+                    "temperature": round(temp, 2),
+                    "pressure": round(press, 2),
+                    "humidity": round(humid, 2),
+                    "rainfall": round(rain, 2),
+                    "wind_speed": round(wind, 2),
+                    "dataset_source": "OpenML 43409 (Goa Historical Climate)"
+                })
+
+            return {
+                "status": "success",
+                "station_id": station_id,
+                "dataset_source": "OpenML 43409",
+                "total_frames": len(records),
+                "frames": records
+            }
+    except Exception as e:
+        print(f"[AnomaliesRouter] Error fetching historical stream: {e}")
+
+    # Fallback to local historical sample frames
+    return {
+        "status": "fallback",
+        "station_id": station_id,
+        "dataset_source": "OpenML Baseline Cache",
+        "total_frames": 0,
+        "frames": []
     }

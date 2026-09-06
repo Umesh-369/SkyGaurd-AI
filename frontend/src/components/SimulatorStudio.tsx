@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Play, 
   Square, 
@@ -14,9 +14,19 @@ import {
   ShieldAlert, 
   Gauge, 
   SlidersHorizontal,
-  ShieldCheck
+  ShieldCheck,
+  History,
+  Radio,
+  FlaskConical,
+  Sparkles,
+  RefreshCw,
+  FastForward,
+  Pause
 } from 'lucide-react';
 import { useSkyGuardStore } from '../store/useSkyGuardStore';
+import { HistoricalReplayFrame, SandboxEvaluationResult } from '../types';
+
+export type SandboxOperationalMode = 'LIVE' | 'HISTORICAL_REPLAY' | 'SIMULATION_SANDBOX';
 
 export const SimulatorStudio: React.FC = () => {
   const {
@@ -31,9 +41,11 @@ export const SimulatorStudio: React.FC = () => {
     setSimSpeed,
     injectFault,
     clearFaults,
-    connectWebSocket,
-    fetchInitialData
+    connectWebSocket
   } = useSkyGuardStore();
+
+  // Sandbox Operational Mode State
+  const [sandboxMode, setSandboxMode] = useState<SandboxOperationalMode>('LIVE');
 
   const [selectedStationId, setSelectedStationId] = useState<string>('AWS-01');
   const [selectedParam, setSelectedParam] = useState<string>('temperature');
@@ -41,10 +53,89 @@ export const SimulatorStudio: React.FC = () => {
   const [notification, setNotification] = useState<string | null>(null);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
 
+  // Historical Replay State
+  const [historicalFrames, setHistoricalFrames] = useState<HistoricalReplayFrame[]>([]);
+  const [replayIndex, setReplayIndex] = useState<number>(0);
+  const [isReplaying, setIsReplaying] = useState<boolean>(false);
+  const [replaySpeed, setReplaySpeed] = useState<number>(1);
+  const [sandboxEvaluation, setSandboxEvaluation] = useState<SandboxEvaluationResult | null>(null);
+  const [loadingReplay, setLoadingReplay] = useState<boolean>(false);
+
+  const replayTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   const notify = (msg: string) => {
     setNotification(msg);
     setTimeout(() => setNotification(null), 4000);
   };
+
+  // Fetch OpenML historical dataset frames when switching to Historical Replay mode
+  useEffect(() => {
+    if (sandboxMode === 'HISTORICAL_REPLAY' && historicalFrames.length === 0) {
+      setLoadingReplay(true);
+      fetch(`/api/anomalies/historical/dataset-stream?station_id=${selectedStationId}&limit=100`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && Array.isArray(data.frames)) {
+            setHistoricalFrames(data.frames);
+            setReplayIndex(0);
+            if (data.frames.length > 0) {
+              evaluateSandboxFrame(data.frames[0]);
+            }
+          }
+        })
+        .catch(err => console.warn('[SimulatorStudio] Historical fetch error:', err))
+        .finally(() => setLoadingReplay(false));
+    }
+  }, [sandboxMode, selectedStationId]);
+
+  // Evaluate sandboxed frame through backend ML pipeline without writing to live feed
+  const evaluateSandboxFrame = async (frame: Partial<HistoricalReplayFrame>) => {
+    try {
+      const res = await fetch('/api/simulator/sandbox-evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          station_id: selectedStationId,
+          temperature: frame.temperature ?? 28.5,
+          pressure: frame.pressure ?? 1012.0,
+          humidity: frame.humidity ?? 78.0,
+          wind_speed: frame.wind_speed ?? 12.0,
+          rainfall: frame.rainfall ?? 0.0,
+          timestamp: frame.timestamp
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSandboxEvaluation(data);
+      }
+    } catch (e) {
+      console.warn('[SimulatorStudio] Sandbox eval error:', e);
+    }
+  };
+
+  // Historical Replay Tick Loop
+  useEffect(() => {
+    if (isReplaying && historicalFrames.length > 0) {
+      const intervalMs = Math.max(200, 1000 / replaySpeed);
+      replayTimerRef.current = setInterval(() => {
+        setReplayIndex(prev => {
+          const next = prev + 1;
+          if (next >= historicalFrames.length) {
+            setIsReplaying(false);
+            return prev;
+          }
+          evaluateSandboxFrame(historicalFrames[next]);
+          return next;
+        });
+      }, intervalMs);
+    } else {
+      if (replayTimerRef.current) clearInterval(replayTimerRef.current);
+    }
+
+    return () => {
+      if (replayTimerRef.current) clearInterval(replayTimerRef.current);
+    };
+  }, [isReplaying, historicalFrames, replaySpeed]);
 
   const handleStart = async () => {
     setLoadingAction('START');
@@ -85,11 +176,35 @@ export const SimulatorStudio: React.FC = () => {
   const handleTrigger = async (faultType: string, param: string, mag: number) => {
     setLoadingAction(faultType);
     try {
-      // Execute fault injection with instant state update
-      await injectFault(selectedStationId, faultType, param, mag);
+      if (sandboxMode === 'SIMULATION_SANDBOX') {
+        // Evaluate in strict sandbox mode
+        let simT = 28.5;
+        let simP = 1012.0;
+        let simRH = 78.0;
 
-      const stName = stations.find(s => s.station_id === selectedStationId || s.id === selectedStationId)?.name || selectedStationId;
-      notify(`FAULT INJECTED: '${faultType.toUpperCase()}' on ${stName} (${param.toUpperCase()} +${mag})`);
+        if (faultType === 'temperature_spike') simT += mag;
+        else if (faultType === 'temperature_drop') simT -= mag;
+        else if (faultType === 'pressure_drop') simP -= mag;
+        else if (faultType === 'humidity_spike') simRH = Math.min(100, simRH + mag);
+        else if (faultType === 'multivariate_fault') {
+          simT += 14.5;
+          simP -= 22.0;
+          simRH = Math.max(0, simRH - 35.0);
+        }
+
+        await evaluateSandboxFrame({
+          temperature: simT,
+          pressure: simP,
+          humidity: simRH,
+          timestamp: new Date().toISOString()
+        });
+        notify(`SANDBOX TEST: Simulated '${faultType.toUpperCase()}' evaluated in local sandbox.`);
+      } else {
+        // Execute standard hardware simulator fault injection
+        await injectFault(selectedStationId, faultType, param, mag);
+        const stName = stations.find(s => s.station_id === selectedStationId || s.id === selectedStationId)?.name || selectedStationId;
+        notify(`FAULT INJECTED: '${faultType.toUpperCase()}' on ${stName} (${param.toUpperCase()} +${mag})`);
+      }
     } finally {
       setLoadingAction(null);
     }
@@ -99,11 +214,14 @@ export const SimulatorStudio: React.FC = () => {
     setLoadingAction('CLEAR');
     try {
       await clearFaults();
+      setSandboxEvaluation(null);
       notify('CLEARED ALL INJECTIONS: All active fault modes reset to normal telemetry.');
     } finally {
       setLoadingAction(null);
     }
   };
+
+  const currentReplayFrame = historicalFrames[replayIndex];
 
   return (
     <div className="space-y-8 pb-12 font-sans text-slate-900 select-none">
@@ -113,84 +231,263 @@ export const SimulatorStudio: React.FC = () => {
         <div>
           <div className="flex items-center space-x-3">
             <div className="p-2.5 bg-sky-50 border border-sky-200 rounded-xl text-sky-700">
-              <Gauge className="w-6 h-6 animate-pulse" />
+              <FlaskConical className="w-6 h-6 animate-pulse" />
             </div>
             <div>
               <h1 className="text-2xl sm:text-3xl font-black font-display uppercase tracking-wider text-slate-900">
-                Virtual AWS Simulator Control Studio
+                Virtual AWS Simulation Sandbox
               </h1>
               <p className="text-sky-700 text-xs font-mono font-bold mt-1">
-                14 STATIONS (OPENML GOA + 10 MAJOR INDIAN CITIES) · REAL-TIME SENSOR STREAMING
+                14 STATIONS (OPENML GOA + 10 MAJOR INDIAN CITIES) · MULTI-MODE SIMULATION & REPLAY
               </p>
             </div>
           </div>
           <p className="text-slate-600 text-xs sm:text-sm font-sans mt-3 max-w-3xl leading-relaxed">
-            Programmatically streams live Temperature, Humidity, and Pressure (Tier 1 core stream) + Wind Speed and Rainfall (Tier 2 context stream) driven by learned baseline distributions across 14 stations. Inject 7 fault modes on demand to trigger real-time backend ML + SHAP pipeline analysis.
+            Execute live hardware simulation streams, scrub historical OpenML climate data recordings, or run isolated controlled fault experiments through the real Tier 1 & Tier 2 ML pipeline without polluting live production feeds.
           </p>
         </div>
 
-        {/* Master Controls: Start | Stop | Reset | Speed */}
-        <div className="flex flex-wrap items-center gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200 shadow-sm">
-          
-          {/* Start Simulation */}
+        {/* Operational Mode Selector: LIVE / HISTORICAL REPLAY / SIMULATION SANDBOX */}
+        <div className="flex flex-col sm:flex-row items-center gap-2 p-1.5 bg-slate-100 rounded-2xl border border-slate-200 shadow-inner">
           <button
-            onClick={handleStart}
-            disabled={isSimulating || loadingAction === 'START'}
-            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-mono font-bold transition-all duration-150 active:scale-95 shadow-sm ${
-              isSimulating
-                ? 'bg-emerald-100 text-emerald-600 border border-emerald-200 cursor-not-allowed'
-                : 'bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 font-extrabold cursor-pointer'
+            onClick={() => { setSandboxMode('LIVE'); setIsReplaying(false); }}
+            className={`px-4 py-2.5 rounded-xl text-xs font-mono font-bold transition-all flex items-center space-x-2 cursor-pointer ${
+              sandboxMode === 'LIVE'
+                ? 'bg-emerald-600 text-white shadow-md font-black'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Play className="w-4 h-4 fill-current" />
-            <span>{loadingAction === 'START' ? 'STARTING...' : 'START SIMULATION'}</span>
+            <Radio className="w-3.5 h-3.5" />
+            <span>LIVE STREAM</span>
           </button>
-
-          {/* Stop Simulation */}
           <button
-            onClick={handleStop}
-            disabled={!isSimulating || loadingAction === 'STOP'}
-            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-mono font-bold transition-all duration-150 active:scale-95 shadow-sm ${
-              !isSimulating
-                ? 'bg-amber-100 text-amber-600 border border-amber-200 cursor-not-allowed'
-                : 'bg-amber-600 hover:bg-amber-700 text-white border border-amber-600 font-extrabold cursor-pointer'
+            onClick={() => { setSandboxMode('HISTORICAL_REPLAY'); }}
+            className={`px-4 py-2.5 rounded-xl text-xs font-mono font-bold transition-all flex items-center space-x-2 cursor-pointer ${
+              sandboxMode === 'HISTORICAL_REPLAY'
+                ? 'bg-blue-600 text-white shadow-md font-black'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Square className="w-4 h-4 fill-current" />
-            <span>{loadingAction === 'STOP' ? 'PAUSING...' : 'STOP / PAUSE'}</span>
+            <History className="w-3.5 h-3.5" />
+            <span>HISTORICAL REPLAY</span>
           </button>
-
-          {/* Reset Simulation */}
           <button
-            onClick={handleReset}
-            disabled={loadingAction === 'RESET'}
-            className="flex items-center space-x-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-xl text-xs font-mono font-bold transition-all duration-150 active:scale-95 shadow-sm cursor-pointer"
+            onClick={() => { setSandboxMode('SIMULATION_SANDBOX'); setIsReplaying(false); }}
+            className={`px-4 py-2.5 rounded-xl text-xs font-mono font-bold transition-all flex items-center space-x-2 cursor-pointer ${
+              sandboxMode === 'SIMULATION_SANDBOX'
+                ? 'bg-purple-600 text-white shadow-md font-black'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
           >
-            <RotateCcw className="w-4 h-4" />
-            <span>{loadingAction === 'RESET' ? 'RESETTING...' : 'RESET BASELINE'}</span>
+            <FlaskConical className="w-3.5 h-3.5" />
+            <span>ISOLATED SANDBOX</span>
           </button>
-
-          {/* Speed Multiplier Selector */}
-          <div className="flex items-center space-x-1.5 pl-3 border-l border-slate-300">
-            <SlidersHorizontal className="w-4 h-4 text-sky-700 shrink-0" />
-            <span className="text-[11px] font-mono font-bold text-slate-600 mr-1 uppercase">SPEED:</span>
-            {[0.5, 1, 2, 5].map((spd) => (
-              <button
-                key={spd}
-                onClick={() => handleSpeed(spd)}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold transition-all duration-150 active:scale-95 cursor-pointer ${
-                  simSpeed === spd
-                    ? 'bg-sky-600 text-white font-black shadow-sm'
-                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
-                }`}
-              >
-                {spd}×
-              </button>
-            ))}
-          </div>
-
         </div>
       </div>
+
+      {/* Persistent Mode Indicator Banner */}
+      <div className={`p-4 rounded-2xl border text-xs font-mono font-bold flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs ${
+        sandboxMode === 'LIVE'
+          ? 'bg-emerald-50/80 border-emerald-300 text-emerald-900'
+          : sandboxMode === 'HISTORICAL_REPLAY'
+          ? 'bg-blue-50/80 border-blue-300 text-blue-900'
+          : 'bg-purple-50/80 border-purple-300 text-purple-900'
+      }`}>
+        <div className="flex items-center space-x-3">
+          <span className={`w-3.5 h-3.5 rounded-full animate-ping ${
+            sandboxMode === 'LIVE' ? 'bg-emerald-600' : sandboxMode === 'HISTORICAL_REPLAY' ? 'bg-blue-600' : 'bg-purple-600'
+          }`} />
+          <div>
+            <span className="font-extrabold uppercase tracking-wider text-sm">
+              ACTIVE MODE: {sandboxMode === 'LIVE' ? 'LIVE CONTINUOUS HARDWARE STREAM' : sandboxMode === 'HISTORICAL_REPLAY' ? 'HISTORICAL OPENML REPLAY ENGINE' : 'ISOLATED SIMULATION SANDBOX'}
+            </span>
+            <p className="text-[11px] font-sans font-normal opacity-90">
+              {sandboxMode === 'LIVE'
+                ? 'Broadcasting real-time hardware telemetry directly to Dashboard and Anomalies Feed.'
+                : sandboxMode === 'HISTORICAL_REPLAY'
+                ? 'Stepping through actual OpenML Goa Dataset (43409) rows through the inference pipeline. Sandboxed from live feeds.'
+                : 'Controlled fault experiments running isolated in memory. Live dashboard feeds remain completely undisturbed.'}
+            </p>
+          </div>
+        </div>
+
+        {/* Master Controls: Start | Stop | Reset | Speed */}
+        {sandboxMode === 'LIVE' && (
+          <div className="flex flex-wrap items-center gap-2 bg-white/80 p-2 rounded-xl border border-emerald-200 shadow-2xs">
+            <button
+              onClick={handleStart}
+              disabled={isSimulating || loadingAction === 'START'}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all ${
+                isSimulating ? 'bg-emerald-100 text-emerald-700 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
+              }`}
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>START</span>
+            </button>
+            <button
+              onClick={handleStop}
+              disabled={!isSimulating || loadingAction === 'STOP'}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all ${
+                !isSimulating ? 'bg-amber-100 text-amber-700 cursor-not-allowed' : 'bg-amber-600 hover:bg-amber-700 text-white cursor-pointer'
+              }`}
+            >
+              <Square className="w-3.5 h-3.5 fill-current" />
+              <span>PAUSE</span>
+            </button>
+            <button
+              onClick={handleReset}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-mono font-bold cursor-pointer"
+            >
+              RESET
+            </button>
+            <div className="flex items-center space-x-1 pl-2 border-l border-slate-300">
+              {[1, 2, 5].map((spd) => (
+                <button
+                  key={spd}
+                  onClick={() => handleSpeed(spd)}
+                  className={`px-2 py-1 rounded text-[11px] font-mono font-bold cursor-pointer ${
+                    simSpeed === spd ? 'bg-emerald-700 text-white' : 'bg-white text-slate-700 border'
+                  }`}
+                >
+                  {spd}×
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Historical Replay Player Controls Bar */}
+      {sandboxMode === 'HISTORICAL_REPLAY' && (
+        <div className="luxury-card p-6 bg-white border border-blue-200 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 rounded-xl bg-blue-50 text-blue-700 border border-blue-200">
+                <History className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-slate-900 font-display uppercase tracking-wider">
+                  OpenML Goa Historical Dataset Player (Dataset 43409)
+                </h3>
+                <span className="text-[11px] font-mono text-slate-500">
+                  FRAME {replayIndex + 1} OF {historicalFrames.length || '100'} · SOURCE: OPENML 43409
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setIsReplaying(!isReplaying)}
+                className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center space-x-1.5 cursor-pointer shadow-sm ${
+                  isReplaying ? 'bg-amber-600 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'
+                }`}
+              >
+                {isReplaying ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+                <span>{isReplaying ? 'PAUSE REPLAY' : 'PLAY REPLAY'}</span>
+              </button>
+              <button
+                onClick={() => { setReplayIndex(0); if (historicalFrames.length > 0) evaluateSandboxFrame(historicalFrames[0]); }}
+                className="p-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700 cursor-pointer"
+                title="Restart from frame 0"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+              <div className="flex items-center space-x-1 pl-2 border-l border-slate-200">
+                <span className="text-[10px] font-mono font-bold text-slate-500 mr-1">SPEED:</span>
+                {[0.5, 1, 2, 5].map((spd) => (
+                  <button
+                    key={spd}
+                    onClick={() => setReplaySpeed(spd)}
+                    className={`px-2 py-1 rounded text-xs font-mono font-bold cursor-pointer ${
+                      replaySpeed === spd ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    {spd}×
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Timeline Scrubber */}
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-[11px] font-mono text-slate-500">
+              <span>Timestamp: {currentReplayFrame?.timestamp ? new Date(currentReplayFrame.timestamp).toLocaleString() : '—'}</span>
+              <span>Scrub Historical Timeline</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={Math.max(0, historicalFrames.length - 1)}
+              value={replayIndex}
+              onChange={(e) => {
+                const idx = parseInt(e.target.value);
+                setReplayIndex(idx);
+                if (historicalFrames[idx]) evaluateSandboxFrame(historicalFrames[idx]);
+              }}
+              className="w-full accent-blue-600 cursor-pointer h-2 bg-slate-200 rounded-lg"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Sandbox Live Inference Inspection Card (When in Replay or Sandbox Mode) */}
+      {(sandboxMode === 'HISTORICAL_REPLAY' || sandboxMode === 'SIMULATION_SANDBOX') && sandboxEvaluation && (
+        <div className="luxury-card p-6 bg-slate-900 text-white border border-slate-800 shadow-xl space-y-4 font-mono">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-3 gap-2">
+            <div className="flex items-center space-x-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-ping"></span>
+              <span className="font-extrabold text-xs text-sky-400 uppercase tracking-wider">
+                REAL-TIME SANDBOX INFERENCE PIPELINE OUTPUT
+              </span>
+            </div>
+            <span className="text-[10px] text-slate-400 bg-slate-800 px-2.5 py-1 rounded-full">
+              STRICTLY ISOLATED · ZERO PRODUCTION WRITE
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700">
+              <span className="text-[10px] text-slate-400 block">TEMPERATURE</span>
+              <strong className="text-white text-sm">{sandboxEvaluation.readings?.temperature?.toFixed(2)} °C</strong>
+            </div>
+            <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700">
+              <span className="text-[10px] text-slate-400 block">PRESSURE</span>
+              <strong className="text-white text-sm">{sandboxEvaluation.readings?.pressure?.toFixed(1)} hPa</strong>
+            </div>
+            <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700">
+              <span className="text-[10px] text-slate-400 block">HUMIDITY</span>
+              <strong className="text-white text-sm">{sandboxEvaluation.readings?.humidity?.toFixed(1)} %</strong>
+            </div>
+            <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700">
+              <span className="text-[10px] text-slate-400 block">ML DETECTION VERDICT</span>
+              <strong className={sandboxEvaluation.detection?.is_anomaly ? 'text-red-400' : 'text-emerald-400'}>
+                {sandboxEvaluation.detection?.is_anomaly ? 'FLAGGED ANOMALY' : 'NORMAL / NOMINAL'}
+              </strong>
+            </div>
+          </div>
+
+          {/* Real Live SHAP Breakdown in Sandbox */}
+          {sandboxEvaluation.contributing_factors && sandboxEvaluation.contributing_factors.length > 0 && (
+            <div className="p-3.5 bg-slate-800/50 rounded-xl border border-slate-700 space-y-2">
+              <span className="text-[10px] font-bold text-sky-400 block uppercase">
+                SHAP Contributing Factors Breakdown:
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                {sandboxEvaluation.contributing_factors.slice(0, 3).map((f, i) => (
+                  <div key={i} className="flex justify-between p-2 bg-slate-800 rounded border border-slate-700/60">
+                    <span className="text-slate-300">{f.feature}:</span>
+                    <span className={f.shap_weight > 0 ? 'text-red-400 font-bold' : 'text-blue-400 font-bold'}>
+                      {f.shap_weight > 0 ? `+${f.shap_weight.toFixed(3)}` : f.shap_weight.toFixed(3)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
 
       {/* Notification Banner */}
       {notification && (

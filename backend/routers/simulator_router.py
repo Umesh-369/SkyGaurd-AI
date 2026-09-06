@@ -246,3 +246,80 @@ async def clear_faults_endpoint(req: Optional[ClearFaultRequest] = None, station
         "disaster_risks": latest_risk
     })
     return res
+
+
+class SandboxEvalRequest(BaseModel):
+    station_id: str = "AWS-01"
+    temperature: float = 28.5
+    pressure: float = 1012.0
+    humidity: float = 78.0
+    wind_speed: float = 12.0
+    rainfall: float = 0.0
+    timestamp: Optional[str] = None
+    fault_type: Optional[str] = None
+
+
+@router.post("/sandbox-evaluate")
+async def evaluate_sandbox_frame_endpoint(req: SandboxEvalRequest):
+    """
+    Evaluates sandboxed telemetry through the real ML Anomaly Detector + SHAP Explainer
+    + Value Imputer + Disaster Risk Engine.
+    STRICTLY ISOLATED: Does NOT write to live feeds or broadcast WebSocket alert events.
+    """
+    target_station = req.station_id
+    t_now = datetime.datetime.fromisoformat(req.timestamp) if req.timestamp else datetime.datetime.now(datetime.timezone.utc)
+
+    # Fetch baseline neighbors for spatial comparison
+    all_readings = [simulator_instance.generate_reading(s) for s in simulator_instance.stations if s != target_station]
+    valid_neighbors = [r for r in all_readings if r is not None]
+
+    # Predict via ML Isolation Forest
+    pred = detector_instance.predict_single(
+        temperature=req.temperature,
+        pressure=req.pressure,
+        humidity=req.humidity,
+        station_id=target_station,
+        timestamp=t_now,
+        spatial_neighbors=valid_neighbors
+    )
+
+    factors = pred.get("contributing_factors", [])
+
+    # Spatio-Temporal Imputation
+    imputed = None
+    if pred.get("is_anomaly"):
+        prim_feat = factors[0]["feature"] if len(factors) > 0 else "temperature"
+        base_p = "temperature" if "temp" in prim_feat else ("pressure" if "press" in prim_feat else "humidity")
+        bad_v = req.temperature if base_p == "temperature" else (req.pressure if base_p == "pressure" else req.humidity)
+        imputed = imputer.suggest_correction(base_p, bad_v, spatial_neighbors=valid_neighbors)
+
+    # Sandbox Tier 2 Risk calculation
+    sandbox_reading = {
+        "temperature": req.temperature,
+        "pressure": req.pressure,
+        "humidity": req.humidity
+    }
+    sandbox_weather_api = {
+        "rainfall_mm": req.rainfall,
+        "wind_speed_kmh": req.wind_speed
+    }
+    sandbox_risks = disaster_risk_engine.calculate_disaster_risks(sandbox_reading, sandbox_weather_api)
+
+    return {
+        "status": "success",
+        "station_id": target_station,
+        "timestamp": t_now.isoformat(),
+        "readings": {
+            "temperature": req.temperature,
+            "pressure": req.pressure,
+            "humidity": req.humidity,
+            "wind_speed": req.wind_speed,
+            "rainfall": req.rainfall
+        },
+        "detection": pred,
+        "contributing_factors": factors,
+        "imputed_suggestion": imputed,
+        "disaster_risks": sandbox_risks,
+        "is_sandboxed": True
+    }
+
