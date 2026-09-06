@@ -83,7 +83,7 @@ export const StationMap: React.FC<StationMapProps> = ({
   const [hoveredStationId, setHoveredStationId] = useState<string | null>(null);
 
   const hoveredStation = stations.find(s => s.station_id === hoveredStationId || s.id === hoveredStationId);
-  const activeHoveredReadings = hoveredStation?.last_reading || { temperature: 28.5, pressure: 1012.0, humidity: 78.0 };
+  const activeHoveredReadings = hoveredStation?.last_reading;
 
   return (
     <div className="luxury-card p-6 relative overflow-hidden bg-white text-slate-900 min-h-[560px] flex flex-col justify-between border border-slate-200 shadow-sm space-y-4 font-sans select-none hover:border-sky-300 transition-colors">
@@ -104,21 +104,6 @@ export const StationMap: React.FC<StationMapProps> = ({
           </div>
         </div>
 
-        {/* Legend Box */}
-        <div className="flex items-center space-x-3 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-[11px] font-mono font-bold">
-          <div className="flex items-center space-x-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-            <span className="text-slate-700">Nominal</span>
-          </div>
-          <div className="flex items-center space-x-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-            <span className="text-slate-700">Warn</span>
-          </div>
-          <div className="flex items-center space-x-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping"></span>
-            <span className="text-slate-700">Anomaly</span>
-          </div>
-        </div>
       </div>
 
       {/* Neural Graph Canvas Container */}
@@ -208,9 +193,9 @@ export const StationMap: React.FC<StationMapProps> = ({
             const posX = (pos.x / 520) * 100;
             const posY = (pos.y / 520) * 100;
 
-            const tempStr = st.last_reading?.temperature !== undefined
+            const tempStr = st.last_reading?.temperature != null
               ? `${st.last_reading.temperature.toFixed(1)}°C`
-              : '28.5°C';
+              : '—';
 
             const statusDotColor = hasFault ? 'bg-red-500' : hasWarning ? 'bg-amber-500' : 'bg-emerald-500';
             const cityName = st.name.split(' ')[0];
@@ -268,38 +253,48 @@ export const StationMap: React.FC<StationMapProps> = ({
           })}
         </div>
 
-        {/* Floating Glassmorphism Hover Card */}
+        {/* Floating Glassmorphism Hover Card (Dynamically flips between top and bottom to avoid covering nodes) */}
         <AnimatePresence>
-          {hoveredStation && (
-            <motion.div
-              initial={{ opacity: 0, y: 8, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 8, scale: 0.95 }}
-              transition={{ duration: 0.15 }}
-              className="absolute bottom-3 right-3 bg-white/95 backdrop-blur-md p-4 rounded-2xl border border-slate-200 shadow-xl text-xs font-sans z-50 min-w-[230px] space-y-2"
-            >
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                <div className="flex items-center space-x-1.5">
-                  <Cpu className="w-3.5 h-3.5 text-sky-600" />
-                  <span className="font-extrabold text-slate-900 font-display uppercase">{hoveredStation.name}</span>
+          {hoveredStation && (() => {
+            const hoveredNodePos = NEURAL_NODE_POSITIONS[hoveredStation.station_id || hoveredStation.id || '']?.y ?? 260;
+            const isBottomNode = hoveredNodePos > 280; // If node is in the lower half, show tooltip at the top
+
+            return (
+              <motion.div
+                initial={{ opacity: 0, y: isBottomNode ? -8 : 8, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: isBottomNode ? -8 : 8, scale: 0.95 }}
+                transition={{ duration: 0.15 }}
+                className={`absolute ${isBottomNode ? 'top-3 right-3' : 'bottom-3 right-3'} bg-white/95 backdrop-blur-md p-4 rounded-2xl border border-slate-200 shadow-xl text-xs font-sans z-50 min-w-[230px] space-y-2 pointer-events-none`}
+              >
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <div className="flex items-center space-x-1.5">
+                    <Cpu className="w-3.5 h-3.5 text-sky-600" />
+                    <span className="font-extrabold text-slate-900 font-display uppercase">{hoveredStation.name}</span>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
+                    {hoveredStation.station_id}
+                  </span>
                 </div>
-                <span className="text-[10px] font-mono font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
-                  {hoveredStation.station_id}
-                </span>
-              </div>
 
               <div className="grid grid-cols-3 gap-2 font-mono text-[11px] pt-1 text-center">
                 <div className="bg-slate-50 p-1.5 rounded border border-slate-200">
                   <span className="text-[9px] text-slate-500 block">TEMP</span>
-                  <strong className="text-slate-900">{(activeHoveredReadings.temperature ?? 28.5).toFixed(1)}°C</strong>
+                  <strong className="text-slate-900">
+                    {activeHoveredReadings?.temperature != null ? `${activeHoveredReadings.temperature.toFixed(1)}°C` : '—'}
+                  </strong>
                 </div>
                 <div className="bg-slate-50 p-1.5 rounded border border-slate-200">
                   <span className="text-[9px] text-slate-500 block">PRESS</span>
-                  <strong className="text-slate-900">{(activeHoveredReadings.pressure ?? 1012.0).toFixed(0)} hPa</strong>
+                  <strong className="text-slate-900">
+                    {activeHoveredReadings?.pressure != null ? `${activeHoveredReadings.pressure.toFixed(0)} hPa` : '—'}
+                  </strong>
                 </div>
                 <div className="bg-slate-50 p-1.5 rounded border border-slate-200">
                   <span className="text-[9px] text-slate-500 block">HUMID</span>
-                  <strong className="text-slate-900">{(activeHoveredReadings.humidity ?? 75.0).toFixed(0)}%</strong>
+                  <strong className="text-slate-900">
+                    {activeHoveredReadings?.humidity != null ? `${activeHoveredReadings.humidity.toFixed(0)}%` : '—'}
+                  </strong>
                 </div>
               </div>
 
@@ -314,7 +309,8 @@ export const StationMap: React.FC<StationMapProps> = ({
                 </span>
               </div>
             </motion.div>
-          )}
+            );
+          })()}
         </AnimatePresence>
 
       </div>
