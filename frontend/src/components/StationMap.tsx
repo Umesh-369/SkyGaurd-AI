@@ -166,7 +166,7 @@ export const StationMap: React.FC<StationMapProps> = ({
                 />
 
                 {/* Real-time Streaming Signal Pulse Dot */}
-                <circle r={isRelated ? "3.5" : "2.5"} fill={isRelated || isSelectedLink ? '#0284c7' : '#38BDF8'} opacity={isRelated ? 1 : 0.75} filter="url(#glowPulse)">
+                <circle cx="0" cy="0" r={isRelated ? "3.5" : "2.5"} fill={isRelated || isSelectedLink ? '#0284c7' : '#38BDF8'} opacity={isRelated ? 1 : 0.75} filter="url(#glowPulse)">
                   <animateMotion
                     dur={`${2.5 + (idx % 4) * 0.6}s`}
                     repeatCount="indefinite"

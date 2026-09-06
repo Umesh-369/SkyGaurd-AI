@@ -152,6 +152,9 @@ export const ArchGauge: React.FC<ArchGaugeProps> = ({
           <g>
             {/* Outer Radiating Pulse Aura */}
             <motion.circle
+              cx={beaconX}
+              cy={beaconY}
+              initial={{ cx: beaconX, cy: beaconY }}
               animate={{
                 cx: beaconX,
                 cy: beaconY,
@@ -168,6 +171,9 @@ export const ArchGauge: React.FC<ArchGaugeProps> = ({
             />
             {/* Crisp Solid Beacon Core */}
             <motion.circle
+              cx={beaconX}
+              cy={beaconY}
+              initial={{ cx: beaconX, cy: beaconY }}
               animate={{ cx: beaconX, cy: beaconY }}
               transition={{ duration: 0.85, ease: [0.16, 1, 0.3, 1] }}
               r="4"

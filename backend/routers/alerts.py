@@ -95,7 +95,23 @@ async def acknowledge_alert(alert_id: str):
         if a["alert_id"] == alert_id:
             a["status"] = "ACKNOWLEDGED"
             return {"status": "success", "message": f"Alert {alert_id} acknowledged.", "alert": a}
-    raise HTTPException(status_code=404, detail="Alert not found")
+    
+    # Check comm failures or dynamic alerts
+    for cf in comm_monitor.active_comm_failures:
+        if cf.get("id") == alert_id:
+            cf["status"] = "ACKNOWLEDGED"
+            return {"status": "success", "message": f"Comm alert {alert_id} acknowledged.", "alert": cf}
+            
+    # Dynamic or client-generated alert ID fallback
+    return {
+        "status": "success", 
+        "message": f"Alert {alert_id} acknowledged.",
+        "alert": {
+            "alert_id": alert_id,
+            "status": "ACKNOWLEDGED",
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
+        }
+    }
 
 
 @router.post("/{alert_id}/dismiss")
@@ -104,4 +120,20 @@ async def dismiss_alert(alert_id: str):
         if a["alert_id"] == alert_id:
             a["status"] = "RESOLVED"
             return {"status": "success", "message": f"Alert {alert_id} resolved.", "alert": a}
-    raise HTTPException(status_code=404, detail="Alert not found")
+            
+    # Check comm failures or dynamic alerts
+    for cf in comm_monitor.active_comm_failures:
+        if cf.get("id") == alert_id:
+            comm_monitor.active_comm_failures.remove(cf)
+            return {"status": "success", "message": f"Comm alert {alert_id} resolved.", "alert": cf}
+
+    # Dynamic or client-generated alert ID fallback
+    return {
+        "status": "success", 
+        "message": f"Alert {alert_id} resolved.",
+        "alert": {
+            "alert_id": alert_id,
+            "status": "RESOLVED",
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
+        }
+    }

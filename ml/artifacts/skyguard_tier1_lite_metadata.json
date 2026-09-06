@@ -9,9 +9,9 @@
   "n_estimators": 50,
   "max_samples": 128,
   "export_path": "D:\\PROJECTS\\SIH\\ml\\artifacts\\skyguard_tier1_lite.onnx",
-  "file_size_bytes": 91885,
-  "file_size_kb": 89.73,
-  "inference_latency_ms": 1.6124,
+  "file_size_bytes": 94076,
+  "file_size_kb": 91.87,
+  "inference_latency_ms": 1.9244,
   "recommended_hardware": "Microcontroller (ESP32 / ARM Cortex-M4, >= 256KB RAM)",
   "energy_consumption_estimate_mJ_per_infer": 0.12
 }
