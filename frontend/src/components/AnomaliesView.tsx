@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { ShieldCheck, Brain, AlertTriangle, CloudRain, WifiOff, FileText, CheckCircle2, History, AlertCircle, Printer, Sparkles } from 'lucide-react';
+import { ShieldCheck, Brain, AlertTriangle, CloudRain, WifiOff, History, Printer } from 'lucide-react';
 import { ShapBreakdown } from './ShapBreakdown';
 import { ImputedValueCard } from './ImputedValueCard';
 import { SpatialConsensusPanel } from './SpatialConsensusPanel';
-import { RecommendedActionsPanel } from './RecommendedActionsPanel';
 import { IncidentReportModal } from './IncidentReportModal';
 import { AnomalyRecord, DisasterRiskSummary } from '../types';
 import { getCanonicalStationName, useSkyGuardStore } from '../store/useSkyGuardStore';
@@ -185,9 +184,6 @@ export const AnomaliesView: React.FC<AnomaliesViewProps> = ({ selectedAnomaly, r
           </div>
         </div>
       </div>
-
-      {/* Feature 1: Deterministic Recommended Actions Panel */}
-      <RecommendedActionsPanel anomaly={selectedAnomaly} disasterRisks={effectiveRisks} />
 
       {/* Mandatory SHAP Feature Contributions Chart */}
       <ShapBreakdown activeAnomaly={selectedAnomaly} />

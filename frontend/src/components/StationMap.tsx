@@ -44,9 +44,10 @@ const NEURAL_NODE_POSITIONS: Record<string, NodePos> = {
   'AWS-IND-BLR':   { x: 270, y: 465, layer: 'PROCESSING LAYER', subType: 'Plateau AWS' },
 
   // Output / Aggregation Layer: Metropolitan & Regional Gateways (X = 440)
-  'AWS-IND-JAI':   { x: 440, y: 85,  layer: 'AGGREGATION LAYER', subType: 'Desert Fringe' },
-  'AWS-IND-LKO':   { x: 440, y: 195, layer: 'AGGREGATION LAYER', subType: 'Gangetic AWS' },
-  'AWS-IND-CCU':   { x: 440, y: 305, layer: 'AGGREGATION LAYER', subType: 'Delta AWS' },
+  'AWS-IND-DEL':   { x: 440, y: 35,  layer: 'AGGREGATION LAYER', subType: 'National Capital AWS' },
+  'AWS-IND-JAI':   { x: 440, y: 115, layer: 'AGGREGATION LAYER', subType: 'Desert Fringe' },
+  'AWS-IND-LKO':   { x: 440, y: 205, layer: 'AGGREGATION LAYER', subType: 'Gangetic AWS' },
+  'AWS-IND-CCU':   { x: 440, y: 310, layer: 'AGGREGATION LAYER', subType: 'Delta AWS' },
   'AWS-IND-MAA':   { x: 440, y: 425, layer: 'AGGREGATION LAYER', subType: 'Coastal AWS' }
 };
 
@@ -59,6 +60,10 @@ const SYNAPTIC_CONNECTIONS: [string, string][] = [
   ["AWS-03", "AWS-IND-HYD"],
   ["AWS-04", "AWS-IND-AMD"],
   ["AWS-04", "AWS-IND-BHO"],
+  ["AWS-IND-MUM", "AWS-IND-DEL"],
+  ["AWS-IND-AMD", "AWS-IND-DEL"],
+  ["AWS-IND-DEL", "AWS-IND-JAI"],
+  ["AWS-IND-DEL", "AWS-IND-LKO"],
   ["AWS-IND-MUM", "AWS-IND-JAI"],
   ["AWS-IND-AMD", "AWS-IND-JAI"],
   ["AWS-IND-AMD", "AWS-IND-LKO"],

@@ -108,20 +108,20 @@ class VirtualAWSSimulator:
                 "base_wind": 14.0,
                 "base_rain": 0.0
             },
-            "AWS-IND-GA-01": {
-                "id": "AWS-IND-GA-01",
-                "legacy_id": "AWS_GOA_01",
-                "alias_id": "AWS-01",
-                "name": "Panaji Coastal Station",
-                "city": "Panaji",
-                "state": "Goa",
-                "lat": 15.4989,
-                "lon": 73.8278,
-                "elevation_m": 7.0,
+            "AWS-IND-DEL": {
+                "id": "AWS-IND-DEL",
+                "legacy_id": "AWS_DELHI",
+                "alias_id": "DELHI",
+                "name": "Delhi National Capital AWS",
+                "city": "Delhi",
+                "state": "Delhi",
+                "lat": 28.6139,
+                "lon": 77.2090,
+                "elevation_m": 216.0,
                 "base_temp": 28.5,
-                "base_press": 1012.0,
-                "base_humid": 80.0,
-                "base_wind": 12.5,
+                "base_press": 1008.5,
+                "base_humid": 55.0,
+                "base_wind": 11.0,
                 "base_rain": 0.0
             },
             "AWS-IND-BLR": {
@@ -311,8 +311,6 @@ class VirtualAWSSimulator:
         magnitude: float = 15.0,
         duration_steps: int = 30
     ) -> Dict[str, Any]:
-        if station_id == "AWS-IND-DEL" or station_id == "DELHI":
-            station_id = "AWS-01"
         matched_id = None
         for key, st in self.stations.items():
             if key == station_id or st.get("legacy_id") == station_id or st.get("alias_id") == station_id:
@@ -343,8 +341,6 @@ class VirtualAWSSimulator:
 
     def clear_injections(self, station_id: Optional[str] = None):
         if station_id:
-            if station_id == "AWS-IND-DEL" or station_id == "DELHI":
-                station_id = "AWS-01"
             matched_id = None
             for key, st in self.stations.items():
                 if key == station_id or st.get("legacy_id") == station_id or st.get("alias_id") == station_id:
@@ -367,8 +363,6 @@ class VirtualAWSSimulator:
         current_time: Optional[datetime.datetime] = None,
         force_regenerate: bool = False
     ) -> Optional[Dict[str, Any]]:
-        if station_id == "AWS-IND-DEL" or station_id == "DELHI":
-            station_id = "AWS-01"
         matched_id = None
         if station_id in self.stations:
             matched_id = station_id

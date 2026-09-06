@@ -102,6 +102,8 @@ export interface Station {
   station_id: string;
   id?: string;
   name: string;
+  city?: string;
+  state?: string;
   coordinates: Coordinates;
   elevation_m: number;
   status: string;

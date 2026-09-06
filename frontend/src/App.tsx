@@ -154,9 +154,6 @@ export const App: React.FC = () => {
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
             <span className="font-semibold text-slate-800">SkyGuard AI — AWS Intelligence System</span>
           </div>
-          <span className="text-sky-700 font-mono text-[11px]">
-            4 Canonical AWS Stations (Goa Sector) · SIH 26073 · OpenML 43409 + Local Climate Trained
-          </span>
         </footer>
 
       </div>

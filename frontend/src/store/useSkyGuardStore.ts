@@ -82,13 +82,13 @@ export const ALL_14_STATIONS: Station[] = [
     health: { station_id: 'AWS-IND-MUM', overall_health_score: 94.0, maintenance_recommended: false, urgency: 'NONE', sensor_scores: { temperature: 94.0, pressure: 95.0, humidity: 93.0 }, degradation_reasons: [] }
   },
   {
-    station_id: 'AWS-IND-GA-01',
-    name: 'Panaji Coastal Station',
-    coordinates: { lat: 15.4989, lon: 73.8278 },
-    elevation_m: 7.0,
+    station_id: 'AWS-IND-DEL',
+    name: 'Delhi National Capital AWS',
+    coordinates: { lat: 28.6139, lon: 77.2090 },
+    elevation_m: 216.0,
     status: 'ONLINE',
-    last_reading: { temperature: 28.5, pressure: 1012.0, humidity: 80.0 },
-    health: { station_id: 'AWS-IND-GA-01', overall_health_score: 95.0, maintenance_recommended: false, urgency: 'NONE', sensor_scores: { temperature: 95.0, pressure: 98.0, humidity: 92.0 }, degradation_reasons: [] }
+    last_reading: { temperature: 28.5, pressure: 1008.5, humidity: 55.0 },
+    health: { station_id: 'AWS-IND-DEL', overall_health_score: 95.0, maintenance_recommended: false, urgency: 'NONE', sensor_scores: { temperature: 95.0, pressure: 97.0, humidity: 93.0 }, degradation_reasons: [] }
   },
   {
     station_id: 'AWS-IND-BLR',
@@ -851,14 +851,11 @@ export function getCanonicalStationName(stationId?: string): string {
   if (!stationId) return 'Panaji Coastal Station';
   const canonicalMap: Record<string, string> = {
     'AWS-01': 'Panaji Coastal Station',
-    'AWS-IND-GA-01': 'Panaji Coastal Station',
     'AWS-02': 'Margao Inland Station',
-    'AWS-IND-GA-02': 'Margao Inland Station',
     'AWS-03': 'Vasco Port Station',
-    'AWS-IND-GA-03': 'Vasco Port Station',
     'AWS-04': 'Mapusa North Station',
-    'AWS-IND-GA-04': 'Mapusa North Station',
     'AWS-IND-MUM': 'Mumbai Coastal AWS',
+    'AWS-IND-DEL': 'Delhi National Capital AWS',
     'AWS-IND-BLR': 'Bengaluru Plateau AWS',
     'AWS-IND-MAA': 'Chennai Coastal AWS',
     'AWS-IND-CCU': 'Kolkata Delta AWS',
@@ -872,10 +869,7 @@ export function getCanonicalStationName(stationId?: string): string {
 }
 
 export function normalizeAnomalyRecord(raw: any): AnomalyRecord {
-  let stId = raw.station_id || raw.stationId || 'AWS-01';
-  if (stId === 'AWS-IND-DEL' || stId === 'DELHI') {
-    stId = 'AWS-IND-GA-01';
-  }
+  const stId = raw.station_id || raw.stationId || 'AWS-01';
   const stName = getCanonicalStationName(stId);
   const rootCause = raw.root_cause || raw.rootCause || 'temperature_spike';
 

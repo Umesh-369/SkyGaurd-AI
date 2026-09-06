@@ -72,8 +72,25 @@ export const AnalyticsPage: React.FC = () => {
     const press = liveR?.pressure ?? st.last_reading?.pressure;
     const humid = liveR?.humidity ?? st.last_reading?.humidity;
 
+    const shortName = st.city || st.name
+      .replace(' Coastal Station', '')
+      .replace(' Inland Station', '')
+      .replace(' Port Station', '')
+      .replace(' North Station', '')
+      .replace(' National Capital AWS', '')
+      .replace(' Coastal AWS', '')
+      .replace(' Plateau AWS', '')
+      .replace(' Delta AWS', '')
+      .replace(' Deccan AWS', '')
+      .replace(' Western AWS', '')
+      .replace(' Desert Fringe AWS', '')
+      .replace(' Gangetic AWS', '')
+      .replace(' Central AWS', '')
+      .replace(' Station', '')
+      .replace(' AWS', '');
+
     return {
-      name: st.name.replace(' Station', '').replace(' AWS', '').replace(' Coastal', '').replace(' Inland', '').replace(' Harbor', '').replace(' North', '').replace(' National Capital', '').replace(' Plateau', '').replace(' Delta', '').replace(' Deccan', '').replace(' Western', '').replace(' Desert Fringe', '').replace(' Gangetic', '').replace(' Central', ''),
+      name: shortName,
       station_id: st.station_id,
       Temperature: temp,
       Pressure: press != null ? Number((press - 950).toFixed(1)) : undefined, // Normalized for chart visual clarity (offset 950 hPa)
@@ -255,11 +272,18 @@ export const AnalyticsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="h-64 w-full pt-2">
+            <div className="h-72 w-full pt-2">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={barChartData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
+                <BarChart data={barChartData} margin={{ top: 10, right: 10, left: -15, bottom: 25 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#0f172a', fontWeight: 600 }} />
+                  <XAxis 
+                    dataKey="name" 
+                    interval={0} 
+                    angle={-30} 
+                    textAnchor="end" 
+                    height={45} 
+                    tick={{ fontSize: 10, fill: '#0f172a', fontWeight: 600 }} 
+                  />
                   <YAxis tick={{ fontSize: 10, fill: '#64748b' }} />
                   <Tooltip 
                     contentStyle={{ backgroundColor: '#ffffff', borderColor: '#cbd5e1', borderRadius: '8px', fontSize: '11px', color: '#0f172a' }}

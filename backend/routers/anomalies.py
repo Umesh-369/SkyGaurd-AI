@@ -26,14 +26,11 @@ data_loader = OpenMLDataLoader()
 
 CANONICAL_STATION_NAMES = {
     "AWS-01": "Panaji Coastal Station",
-    "AWS-IND-GA-01": "Panaji Coastal Station",
     "AWS-02": "Margao Inland Station",
-    "AWS-IND-GA-02": "Margao Inland Station",
     "AWS-03": "Vasco Port Station",
-    "AWS-IND-GA-03": "Vasco Port Station",
     "AWS-04": "Mapusa North Station",
-    "AWS-IND-GA-04": "Mapusa North Station",
     "AWS-IND-MUM": "Mumbai Coastal AWS",
+    "AWS-IND-DEL": "Delhi National Capital AWS",
     "AWS-IND-BLR": "Bengaluru Plateau AWS",
     "AWS-IND-MAA": "Chennai Coastal AWS",
     "AWS-IND-CCU": "Kolkata Delta AWS",
@@ -172,8 +169,6 @@ def record_live_anomaly(
     and permanently archives it in HISTORICAL_ANOMALIES_ARCHIVE (max 500).
     """
     st_id = reading["station_id"]
-    if st_id == "AWS-IND-DEL" or st_id == "DELHI":
-        st_id = "AWS-01"
     st_name = CANONICAL_STATION_NAMES.get(st_id) or reading.get("station_name") or CANONICAL_STATION_NAMES["AWS-01"]
     
     category = pred.get("category") or ("COMMUNICATION_FAILURE" if "comm" in str(pred.get("status", "")).lower() else "SENSOR_FAULT")
