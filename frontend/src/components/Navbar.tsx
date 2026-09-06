@@ -155,7 +155,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Clock Display */}
         <div className="font-mono text-xs font-extrabold text-sky-800 bg-sky-50/80 px-3 py-1 rounded-lg border border-sky-200">
-          {timeString || '11:40:14 IST'}
+          {timeString || '--:--:-- IST'}
         </div>
 
         {/* Notification Bell with Interactive Alert Dropdown */}

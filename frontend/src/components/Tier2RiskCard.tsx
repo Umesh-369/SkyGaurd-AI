@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTelemetryStore, evaluateTier1Anomaly, evaluateTier2Risk } from '../store/useSkyGuardStore';
 import { Station, Reading, AnomalyRecord } from '../types';
 import { AnimatedNumber } from './Tier1DetectionCard';
+import { ArchGauge } from './ArchGauge';
 
 interface Tier2RiskCardProps {
   selectedStation?: Station;
@@ -25,9 +26,11 @@ export const Tier2RiskCard: React.FC<Tier2RiskCardProps> = ({
     r => r.station_id === stationId || r.station_id === selectedStation?.id
   );
 
-  const activeAnomaly = propAnomaly || anomalies.find(
-    a => (a.station_id === stationId || a.station_id === selectedStation?.id) && a.is_anomaly
-  );
+  const isLiveAnom = Boolean(currentReading?.anomaly_evaluation?.is_anomaly || (currentReading?.injected_fault_type && currentReading.injected_fault_type !== 'NONE'));
+
+  const activeAnomaly = propAnomaly !== undefined
+    ? propAnomaly
+    : (isLiveAnom ? anomalies.find(a => (a.station_id === stationId || a.station_id === selectedStation?.id) && a.is_anomaly) : undefined);
 
   const temp = currentReading?.temperature ?? selectedStation?.last_reading?.temperature ?? 28.5;
   const press = currentReading?.pressure ?? selectedStation?.last_reading?.pressure ?? 1012.0;
@@ -53,14 +56,25 @@ export const Tier2RiskCard: React.FC<Tier2RiskCardProps> = ({
 
   const strokeColor = isSevereOrHigh ? '#dc2626' : isModerate ? '#d97706' : '#059669';
 
-  const gaugeOffset =
-    tier2Eval.compositeRiskLevel === 'SEVERE'
-      ? 0
-      : tier2Eval.compositeRiskLevel === 'HIGH'
-      ? 30
-      : tier2Eval.compositeRiskLevel === 'MODERATE'
-      ? 70
-      : 125;
+  const tier2GradientStops = isSevereOrHigh
+    ? [
+        { offset: '0%', color: '#f59e0b' },
+        { offset: '50%', color: '#ea580c' },
+        { offset: '100%', color: '#dc2626' }
+      ]
+    : isModerate
+    ? [
+        { offset: '0%', color: '#10b981' },
+        { offset: '50%', color: '#eab308' },
+        { offset: '100%', color: '#f59e0b' }
+      ]
+    : [
+        { offset: '0%', color: '#06b6d4' },
+        { offset: '50%', color: '#10b981' },
+        { offset: '100%', color: '#059669' }
+      ];
+
+  const normalizedRiskScore = Math.min(1, Math.max(0, (tier2Eval.compositeRiskScore ?? 0) / 100));
 
   return (
     <motion.div
@@ -83,8 +97,17 @@ export const Tier2RiskCard: React.FC<Tier2RiskCardProps> = ({
             animate={{ scale: 1, filter: 'brightness(1)' }}
             exit={{ scale: 0.9 }}
             transition={{ duration: 0.4, ease: "easeOut" }}
-            className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-full border shadow-sm ${riskBadgeColor}`}
+            className={`inline-flex items-center text-[10px] font-mono font-bold px-2.5 py-1 rounded-full border shadow-xs ${riskBadgeColor}`}
           >
+            <span
+              className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
+                isSevereOrHigh
+                  ? 'bg-red-500 animate-ping'
+                  : isModerate
+                  ? 'bg-amber-500 animate-pulse'
+                  : 'bg-emerald-500'
+              }`}
+            />
             {tier2Eval.compositeRiskLevel} RISK
           </motion.span>
         </AnimatePresence>
@@ -99,72 +122,62 @@ export const Tier2RiskCard: React.FC<Tier2RiskCardProps> = ({
           <div className="space-y-1.5 text-slate-700 text-xs font-mono">
             <div className="flex items-center space-x-2">
               <Thermometer className="w-3.5 h-3.5 text-sky-600" />
-              <span>{temp.toFixed(1)}°C Temp</span>
+              <span><AnimatedNumber value={temp} decimals={1} />°C Temp</span>
             </div>
             <div className="flex items-center space-x-2">
               <Droplets className="w-3.5 h-3.5 text-sky-600" />
-              <span>{hum.toFixed(1)}% Humidity</span>
+              <span><AnimatedNumber value={hum} decimals={1} />% Humidity</span>
             </div>
             <div className="flex items-center space-x-2">
               <CloudRain className="w-3.5 h-3.5 text-sky-600" />
-              <span>{rain > 0 ? `${rain.toFixed(1)} mm Rain` : 'No Rain'}</span>
+              <span>{rain > 0 ? <><AnimatedNumber value={rain} decimals={1} /> mm Rain</> : 'No Rain'}</span>
             </div>
             <div className="flex items-center space-x-2">
               <Wind className="w-3.5 h-3.5 text-sky-600" />
-              <span>{wind.toFixed(1)} km/h Wind</span>
+              <span><AnimatedNumber value={wind} decimals={1} /> km/h Wind</span>
             </div>
           </div>
         </div>
 
-        {/* Risk Assessment Gauge */}
+        {/* Risk Assessment 180-Degree Arch Speedometer Gauge */}
         <div className="flex flex-col items-center justify-center p-2 text-center">
           <span className="text-[10px] font-mono font-extrabold text-emerald-700 uppercase tracking-widest mb-1">
             RISK ASSESSMENT
           </span>
 
-          <div className={`relative w-36 h-20 flex items-end justify-center transition-all duration-500 ${
-            isSevereOrHigh
-              ? 'drop-shadow-[0_0_12px_rgba(239,68,68,0.55)]'
-              : isModerate
-              ? 'drop-shadow-[0_0_8px_rgba(217,119,6,0.4)]'
-              : ''
-          }`}>
-            <svg className="w-36 h-36 transform -rotate-90 overflow-visible" viewBox="0 0 100 100">
-              <circle
-                cx="50" cy="50" r="40"
-                stroke="#e2e8f0" strokeWidth="8"
-                fill="none"
-                strokeDasharray="125 250"
-              />
-              <motion.circle
-                cx="50" cy="50" r="40"
-                stroke={strokeColor}
-                strokeWidth="8"
-                fill="none"
-                strokeDasharray="125 250"
-                initial={{ strokeDashoffset: 125 }}
-                animate={{ strokeDashoffset: gaugeOffset }}
-                transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                strokeLinecap="round"
-              />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-end pb-1">
-              <motion.span
-                animate={isSevereOrHigh ? { scale: [1, 1.04, 1] } : { scale: 1 }}
-                transition={{ repeat: isSevereOrHigh ? Infinity : 0, duration: 2, ease: "easeInOut" }}
-                className={`text-3xl font-extrabold font-mono tracking-tight leading-none ${
-                  isSevereOrHigh ? 'text-red-700' : isModerate ? 'text-amber-700' : 'text-emerald-700'
-                }`}
-              >
-                {tier2Eval.compositeRiskLevel}
-              </motion.span>
-              <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider mt-1">
+          <ArchGauge
+            value={normalizedRiskScore}
+            strokeColor={strokeColor}
+            gradientStops={tier2GradientStops}
+            isWarn={isModerate}
+            isCritical={isSevereOrHigh}
+            tickLabels={['0', '100']}
+            idPrefix="tier2"
+            centerTop={
+              <AnimatePresence mode="wait">
+                <motion.span
+                  key={tier2Eval.compositeRiskLevel}
+                  initial={{ opacity: 0, scale: 0.85 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.85 }}
+                  transition={{ duration: 0.25 }}
+                  className={`text-2xl font-black font-mono tracking-tight leading-none ${
+                    isSevereOrHigh ? 'text-red-700' : isModerate ? 'text-amber-700' : 'text-emerald-700'
+                  }`}
+                >
+                  {tier2Eval.compositeRiskLevel}
+                </motion.span>
+              </AnimatePresence>
+            }
+            centerBottom={
+              <span className="text-[9px] font-mono font-bold text-slate-500 uppercase tracking-wider mt-1">
                 RISK LEVEL
               </span>
-            </div>
-          </div>
+            }
+          />
+
           <p className="text-[10px] text-slate-500 mt-1 font-mono">
-            Score: <AnimatedNumber value={tier2Eval.compositeRiskScore} decimals={0} />/100
+            Score: <span className="font-bold text-slate-800"><AnimatedNumber value={tier2Eval.compositeRiskScore} decimals={0} /></span>/100
           </p>
         </div>
 
@@ -182,16 +195,16 @@ export const Tier2RiskCard: React.FC<Tier2RiskCardProps> = ({
                 <span>Flood Risk</span>
               </span>
               <span className={`font-mono font-bold text-[11px] ${tier2Eval.floodRiskLevel === 'HIGH' || tier2Eval.floodRiskLevel === 'SEVERE' ? 'text-red-700' : 'text-emerald-700'}`}>
-                {tier2Eval.floodRiskScore}% ({tier2Eval.floodRiskLevel})
+                <AnimatedNumber value={tier2Eval.floodRiskScore} decimals={0} />% ({tier2Eval.floodRiskLevel})
               </span>
             </div>
-            <div className="w-full h-2 bg-slate-200/80 rounded-full overflow-hidden">
+            <div className="w-full h-2 bg-slate-200/80 rounded-full overflow-hidden relative">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${tier2Eval.floodMeterPct}%` }}
                 transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
                 className={`h-full rounded-full ${
-                  tier2Eval.floodRiskLevel === 'SEVERE' || tier2Eval.floodRiskLevel === 'HIGH' ? 'bg-red-600' : 'bg-sky-600'
+                  tier2Eval.floodRiskLevel === 'SEVERE' || tier2Eval.floodRiskLevel === 'HIGH' ? 'bg-red-600 shadow-[0_0_6px_rgba(220,38,38,0.5)]' : 'bg-sky-600'
                 }`}
               />
             </div>
@@ -205,16 +218,16 @@ export const Tier2RiskCard: React.FC<Tier2RiskCardProps> = ({
                 <span>Heatwave Risk</span>
               </span>
               <span className={`font-mono font-bold text-[11px] ${tier2Eval.heatwaveRiskLevel === 'HIGH' || tier2Eval.heatwaveRiskLevel === 'SEVERE' ? 'text-red-700' : 'text-emerald-700'}`}>
-                {tier2Eval.heatwaveRiskScore}% ({tier2Eval.heatwaveRiskLevel})
+                <AnimatedNumber value={tier2Eval.heatwaveRiskScore} decimals={0} />% ({tier2Eval.heatwaveRiskLevel})
               </span>
             </div>
-            <div className="w-full h-2 bg-slate-200/80 rounded-full overflow-hidden">
+            <div className="w-full h-2 bg-slate-200/80 rounded-full overflow-hidden relative">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${tier2Eval.heatwaveMeterPct}%` }}
                 transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
                 className={`h-full rounded-full ${
-                  tier2Eval.heatwaveRiskLevel === 'SEVERE' || tier2Eval.heatwaveRiskLevel === 'HIGH' ? 'bg-red-600' : 'bg-amber-500'
+                  tier2Eval.heatwaveRiskLevel === 'SEVERE' || tier2Eval.heatwaveRiskLevel === 'HIGH' ? 'bg-red-600 shadow-[0_0_6px_rgba(220,38,38,0.5)]' : 'bg-amber-500'
                 }`}
               />
             </div>

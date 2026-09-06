@@ -3,6 +3,7 @@ import { ShieldCheck, Thermometer, Gauge, Droplets } from 'lucide-react';
 import { motion, AnimatePresence, useSpring } from 'framer-motion';
 import { useTelemetryStore, evaluateTier1Anomaly } from '../store/useSkyGuardStore';
 import { Station, Reading, AnomalyRecord } from '../types';
+import { ArchGauge } from './ArchGauge';
 
 interface Tier1DetectionCardProps {
   selectedStation?: Station;
@@ -10,21 +11,28 @@ interface Tier1DetectionCardProps {
   activeAnomaly?: AnomalyRecord;
 }
 
-export const AnimatedNumber: React.FC<{ value: number; decimals?: number }> = ({ value, decimals = 2 }) => {
-  const spring = useSpring(value, { stiffness: 90, damping: 18 });
-  const [display, setDisplay] = useState(value.toFixed(decimals));
+export const AnimatedNumber: React.FC<{ value: number; decimals?: number; className?: string }> = ({
+  value = 0,
+  decimals = 2,
+  className
+}) => {
+  const safeVal = Number.isFinite(value) ? value : 0;
+  const spring = useSpring(safeVal, { stiffness: 90, damping: 18 });
+  const [display, setDisplay] = useState(safeVal.toFixed(decimals));
 
   useEffect(() => {
-    spring.set(value);
-  }, [value, spring]);
+    spring.set(safeVal);
+  }, [safeVal, spring]);
 
   useEffect(() => {
     return spring.on('change', (latest) => {
-      setDisplay(latest.toFixed(decimals));
+      if (Number.isFinite(latest)) {
+        setDisplay(latest.toFixed(decimals));
+      }
     });
   }, [spring, decimals]);
 
-  return <span>{display}</span>;
+  return <span className={className}>{display}</span>;
 };
 
 export const Tier1DetectionCard: React.FC<Tier1DetectionCardProps> = ({
@@ -41,9 +49,11 @@ export const Tier1DetectionCard: React.FC<Tier1DetectionCardProps> = ({
     r => r.station_id === stationId || r.station_id === selectedStation?.id
   );
 
-  const activeAnomaly = propAnomaly || anomalies.find(
-    a => (a.station_id === stationId || a.station_id === selectedStation?.id) && a.is_anomaly
-  );
+  const isLiveAnom = Boolean(currentReading?.anomaly_evaluation?.is_anomaly || (currentReading?.injected_fault_type && currentReading.injected_fault_type !== 'NONE'));
+
+  const activeAnomaly = propAnomaly !== undefined
+    ? propAnomaly
+    : (isLiveAnom ? anomalies.find(a => (a.station_id === stationId || a.station_id === selectedStation?.id) && a.is_anomaly) : undefined);
 
   const temp = currentReading?.temperature ?? selectedStation?.last_reading?.temperature ?? 28.5;
   const press = currentReading?.pressure ?? selectedStation?.last_reading?.pressure ?? 1012.0;
@@ -64,11 +74,28 @@ export const Tier1DetectionCard: React.FC<Tier1DetectionCardProps> = ({
     ? new Date(currentReading.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' IST'
     : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' IST';
 
-  const anomalyScoreOffset = Math.round(125 * (1 - evalResult.anomalyScore));
   const isCritical = evalResult.anomalyScore > 0.60 || evalResult.statusBadge === 'CRITICAL ANOMALY';
   const isWarn = evalResult.anomalyScore >= 0.35 && !isCritical;
 
   const strokeColor = isCritical ? '#dc2626' : isWarn ? '#d97706' : '#059669';
+
+  const tier1GradientStops = isCritical
+    ? [
+        { offset: '0%', color: '#fb923c' },
+        { offset: '50%', color: '#ef4444' },
+        { offset: '100%', color: '#b91c1c' }
+      ]
+    : isWarn
+    ? [
+        { offset: '0%', color: '#fde047' },
+        { offset: '50%', color: '#f59e0b' },
+        { offset: '100%', color: '#d97706' }
+      ]
+    : [
+        { offset: '0%', color: '#34d399' },
+        { offset: '50%', color: '#10b981' },
+        { offset: '100%', color: '#0284c7' }
+      ];
 
   return (
     <motion.div
@@ -91,8 +118,17 @@ export const Tier1DetectionCard: React.FC<Tier1DetectionCardProps> = ({
             animate={{ scale: 1, filter: 'brightness(1)' }}
             exit={{ scale: 0.9 }}
             transition={{ duration: 0.4, ease: "easeOut" }}
-            className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-full border shadow-sm ${evalResult.badgeBg} ${evalResult.badgeColor}`}
+            className={`inline-flex items-center text-[10px] font-mono font-bold px-2.5 py-1 rounded-full border shadow-xs ${evalResult.badgeBg} ${evalResult.badgeColor}`}
           >
+            <span
+              className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
+                isCritical
+                  ? 'bg-red-500 animate-ping'
+                  : isWarn
+                  ? 'bg-amber-500 animate-pulse'
+                  : 'bg-emerald-500'
+              }`}
+            />
             {evalResult.statusBadge}
           </motion.span>
         </AnimatePresence>
@@ -104,18 +140,18 @@ export const Tier1DetectionCard: React.FC<Tier1DetectionCardProps> = ({
           {/* Temp Chip */}
           <motion.div
             key={evalResult.isTempFlagged ? 'temp-flagged' : 'temp-normal'}
-            initial={{ opacity: 0, scale: 0.95 }}
+            initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.25 }}
             className={`flex items-center justify-between p-2.5 rounded-lg border transition-all ${
               evalResult.isTempFlagged
-                ? 'bg-red-50/90 border-red-300 text-red-900 font-bold shadow-sm'
+                ? 'bg-red-50/90 border-red-300 text-red-900 font-bold shadow-sm ring-1 ring-red-400/40'
                 : 'bg-slate-50 border-slate-200 text-slate-800'
             }`}
           >
             <span className="flex items-center space-x-2">
-              <Thermometer className={`w-3.5 h-3.5 ${evalResult.isTempFlagged ? 'text-red-600 animate-pulse' : 'text-red-600'}`} />
-              <span>Temp ({temp.toFixed(1)}°C)</span>
+              <Thermometer className={`w-3.5 h-3.5 ${evalResult.isTempFlagged ? 'text-red-600 animate-pulse' : 'text-rose-500'}`} />
+              <span>Temp (<AnimatedNumber value={temp} decimals={1} />°C)</span>
             </span>
             <AnimatePresence mode="wait">
               <motion.span
@@ -125,7 +161,7 @@ export const Tier1DetectionCard: React.FC<Tier1DetectionCardProps> = ({
                 exit={{ opacity: 0, scale: 0.8 }}
                 transition={{ duration: 0.2 }}
                 className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
-                  evalResult.isTempFlagged ? 'text-red-700 bg-red-100 border-red-300' : 'text-emerald-700 bg-emerald-100 border-emerald-200'
+                  evalResult.isTempFlagged ? 'text-red-700 bg-red-100 border-red-300 animate-pulse' : 'text-emerald-700 bg-emerald-100 border-emerald-200'
                 }`}
               >
                 {evalResult.isTempFlagged ? 'FLAGGED' : 'Normal'}
@@ -136,18 +172,18 @@ export const Tier1DetectionCard: React.FC<Tier1DetectionCardProps> = ({
           {/* Pressure Chip */}
           <motion.div
             key={evalResult.isPressFlagged ? 'press-flagged' : 'press-normal'}
-            initial={{ opacity: 0, scale: 0.95 }}
+            initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.25 }}
             className={`flex items-center justify-between p-2.5 rounded-lg border transition-all ${
               evalResult.isPressFlagged
-                ? 'bg-red-50/90 border-red-300 text-red-900 font-bold shadow-sm'
+                ? 'bg-red-50/90 border-red-300 text-red-900 font-bold shadow-sm ring-1 ring-red-400/40'
                 : 'bg-slate-50 border-slate-200 text-slate-800'
             }`}
           >
             <span className="flex items-center space-x-2">
               <Gauge className={`w-3.5 h-3.5 ${evalResult.isPressFlagged ? 'text-red-600 animate-pulse' : 'text-sky-600'}`} />
-              <span>Pressure ({press.toFixed(1)} hPa)</span>
+              <span>Pressure (<AnimatedNumber value={press} decimals={1} /> hPa)</span>
             </span>
             <AnimatePresence mode="wait">
               <motion.span
@@ -157,7 +193,7 @@ export const Tier1DetectionCard: React.FC<Tier1DetectionCardProps> = ({
                 exit={{ opacity: 0, scale: 0.8 }}
                 transition={{ duration: 0.2 }}
                 className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
-                  evalResult.isPressFlagged ? 'text-red-700 bg-red-100 border-red-300' : 'text-emerald-700 bg-emerald-100 border-emerald-200'
+                  evalResult.isPressFlagged ? 'text-red-700 bg-red-100 border-red-300 animate-pulse' : 'text-emerald-700 bg-emerald-100 border-emerald-200'
                 }`}
               >
                 {evalResult.isPressFlagged ? 'FLAGGED' : 'Normal'}
@@ -168,18 +204,18 @@ export const Tier1DetectionCard: React.FC<Tier1DetectionCardProps> = ({
           {/* Humidity Chip */}
           <motion.div
             key={evalResult.isHumFlagged ? 'hum-flagged' : 'hum-normal'}
-            initial={{ opacity: 0, scale: 0.95 }}
+            initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.25 }}
             className={`flex items-center justify-between p-2.5 rounded-lg border transition-all ${
               evalResult.isHumFlagged
-                ? 'bg-red-50/90 border-red-300 text-red-900 font-bold shadow-sm'
+                ? 'bg-red-50/90 border-red-300 text-red-900 font-bold shadow-sm ring-1 ring-red-400/40'
                 : 'bg-slate-50 border-slate-200 text-slate-800'
             }`}
           >
             <span className="flex items-center space-x-2">
               <Droplets className={`w-3.5 h-3.5 ${evalResult.isHumFlagged ? 'text-red-600 animate-pulse' : 'text-sky-600'}`} />
-              <span>Humidity ({hum.toFixed(1)}%)</span>
+              <span>Humidity (<AnimatedNumber value={hum} decimals={1} />%)</span>
             </span>
             <AnimatePresence mode="wait">
               <motion.span
@@ -189,7 +225,7 @@ export const Tier1DetectionCard: React.FC<Tier1DetectionCardProps> = ({
                 exit={{ opacity: 0, scale: 0.8 }}
                 transition={{ duration: 0.2 }}
                 className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
-                  evalResult.isHumFlagged ? 'text-red-700 bg-red-100 border-red-300' : 'text-emerald-700 bg-emerald-100 border-emerald-200'
+                  evalResult.isHumFlagged ? 'text-red-700 bg-red-100 border-red-300 animate-pulse' : 'text-emerald-700 bg-emerald-100 border-emerald-200'
                 }`}
               >
                 {evalResult.isHumFlagged ? 'FLAGGED' : 'Normal'}
@@ -198,54 +234,43 @@ export const Tier1DetectionCard: React.FC<Tier1DetectionCardProps> = ({
           </motion.div>
         </div>
 
-        {/* Anomaly Score Gauge with Animated Ring & Dynamic Glow */}
+        {/* Anomaly Score 180-Degree Arch Speedometer Gauge */}
         <div className="flex flex-col items-center justify-center p-2 text-center">
           <span className="text-[10px] font-mono font-extrabold text-sky-700 uppercase tracking-widest mb-1">
             ANOMALY SCORE
           </span>
 
-          <div className={`relative w-36 h-20 flex items-end justify-center transition-all duration-500 ${
-            isCritical
-              ? 'drop-shadow-[0_0_12px_rgba(239,68,68,0.55)]'
-              : isWarn
-              ? 'drop-shadow-[0_0_8px_rgba(217,119,6,0.4)]'
-              : ''
-          }`}>
-            <svg className="w-36 h-36 transform -rotate-90 overflow-visible" viewBox="0 0 100 100">
-              <circle
-                cx="50" cy="50" r="40"
-                stroke="#e2e8f0" strokeWidth="8"
-                fill="none"
-                strokeDasharray="125 250"
-              />
-              <motion.circle
-                cx="50" cy="50" r="40"
-                stroke={strokeColor}
-                strokeWidth="8"
-                fill="none"
-                strokeDasharray="125 250"
-                initial={{ strokeDashoffset: 125 }}
-                animate={{ strokeDashoffset: anomalyScoreOffset }}
-                transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                strokeLinecap="round"
-              />
-            </svg>
-
-            <div className="absolute inset-0 flex flex-col items-center justify-end pb-1">
+          <ArchGauge
+            value={evalResult.anomalyScore}
+            strokeColor={strokeColor}
+            gradientStops={tier1GradientStops}
+            isWarn={isWarn}
+            isCritical={isCritical}
+            tickLabels={['0.0', '1.0']}
+            idPrefix="tier1"
+            centerTop={
               <motion.span
-                animate={isCritical ? { scale: [1, 1.04, 1] } : { scale: 1 }}
-                transition={{ repeat: isCritical ? Infinity : 0, duration: 2, ease: "easeInOut" }}
+                animate={isCritical ? { scale: [1, 1.05, 1] } : { scale: 1 }}
+                transition={{ repeat: isCritical ? Infinity : 0, duration: 2, ease: 'easeInOut' }}
                 className="text-3xl font-extrabold text-slate-900 font-mono tracking-tight leading-none"
               >
                 <AnimatedNumber value={evalResult.anomalyScore} decimals={2} />
               </motion.span>
-              <span className={`text-[9px] font-mono font-black uppercase tracking-wider mt-1 ${
-                isCritical ? 'text-red-700 animate-pulse' : isWarn ? 'text-amber-700' : 'text-emerald-700'
-              }`}>
+            }
+            centerBottom={
+              <span
+                className={`text-[9px] font-mono font-black uppercase tracking-wider mt-1 px-2 py-0.5 rounded-full border shadow-xs ${
+                  isCritical
+                    ? 'text-red-700 bg-red-100/90 border-red-300 animate-pulse'
+                    : isWarn
+                    ? 'text-amber-700 bg-amber-100/90 border-amber-300'
+                    : 'text-emerald-700 bg-emerald-100/90 border-emerald-300'
+                }`}
+              >
                 {evalResult.statusBadge}
               </span>
-            </div>
-          </div>
+            }
+          />
         </div>
 
         {/* Diagnostics & Detection Reason */}
@@ -256,7 +281,9 @@ export const Tier1DetectionCard: React.FC<Tier1DetectionCardProps> = ({
           </div>
           <div>
             <span className="text-[10px] text-sky-700 block font-mono font-bold uppercase">CONFIDENCE</span>
-            <span className="font-bold text-emerald-700 font-mono">{evalResult.confidencePct}%</span>
+            <span className="font-bold text-emerald-700 font-mono">
+              <AnimatedNumber value={evalResult.confidencePct} decimals={0} />%
+            </span>
           </div>
           <div>
             <span className="text-[10px] text-sky-700 block font-mono font-bold uppercase">REASON</span>

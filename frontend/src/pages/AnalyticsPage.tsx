@@ -45,6 +45,20 @@ export const AnalyticsPage: React.FC = () => {
 
   const [selectedSector, setSelectedSector] = React.useState<'ALL' | 'GOA' | 'METRO'>('ALL');
 
+  // Fetch edge model metadata dynamically from backend
+  const [edgeModelMeta, setEdgeModelMeta] = React.useState<{
+    file_size_kb?: number;
+    inference_latency_ms?: number;
+    energy_consumption_estimate_mJ_per_infer?: number;
+  } | null>(null);
+
+  React.useEffect(() => {
+    fetch('/api/analytics/edge-model')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (data) setEdgeModelMeta(data); })
+      .catch(() => {/* silently fall through — liveInferenceLatency covers latency */});
+  }, []);
+
   const filteredStations = stations.filter(st => {
     const isGoa = ['AWS-01', 'AWS-02', 'AWS-03', 'AWS-04'].includes(st.station_id || st.id || '');
     if (selectedSector === 'GOA') return isGoa;
@@ -54,15 +68,15 @@ export const AnalyticsPage: React.FC = () => {
 
   const barChartData = filteredStations.map((st) => {
     const liveR = liveReadings.find(r => r.station_id === st.station_id || r.station_id === st.id);
-    const temp = liveR ? liveR.temperature : (st.last_reading?.temperature ?? 28.5);
-    const press = liveR ? liveR.pressure : (st.last_reading?.pressure ?? 1012.0);
-    const humid = liveR ? liveR.humidity : (st.last_reading?.humidity ?? 80.0);
+    const temp = liveR?.temperature ?? st.last_reading?.temperature;
+    const press = liveR?.pressure ?? st.last_reading?.pressure;
+    const humid = liveR?.humidity ?? st.last_reading?.humidity;
 
     return {
       name: st.name.replace(' Station', '').replace(' AWS', '').replace(' Coastal', '').replace(' Inland', '').replace(' Harbor', '').replace(' North', '').replace(' National Capital', '').replace(' Plateau', '').replace(' Delta', '').replace(' Deccan', '').replace(' Western', '').replace(' Desert Fringe', '').replace(' Gangetic', '').replace(' Central', ''),
       station_id: st.station_id,
       Temperature: temp,
-      Pressure: Number((press - 950).toFixed(1)), // Normalized for chart visual clarity (offset 950 hPa)
+      Pressure: press != null ? Number((press - 950).toFixed(1)) : undefined, // Normalized for chart visual clarity (offset 950 hPa)
       PressureRaw: press,
       Humidity: humid
     };
@@ -538,22 +552,32 @@ export const AnalyticsPage: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 pt-1 font-mono">
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
               <span className="text-[10px] text-slate-500 uppercase font-semibold block">Exported File Size</span>
-              <span className="text-xl font-black text-sky-700 mt-1 block">87.26 KB</span>
+              <span className="text-xl font-black text-sky-700 mt-1 block">
+                {edgeModelMeta?.file_size_kb != null ? `${edgeModelMeta.file_size_kb.toFixed(2)} KB` : '—'}
+              </span>
             </div>
 
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
               <span className="text-[10px] text-slate-500 uppercase font-semibold block">Measured Inference Latency</span>
-              <span className="text-xl font-black text-emerald-700 mt-1 block">{liveInferenceLatency.toFixed(3)} ms</span>
+              <span className="text-xl font-black text-emerald-700 mt-1 block">
+                {liveInferenceLatency != null ? `${liveInferenceLatency.toFixed(3)} ms` : (edgeModelMeta?.inference_latency_ms != null ? `${edgeModelMeta.inference_latency_ms.toFixed(3)} ms` : '—')}
+              </span>
             </div>
 
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
               <span className="text-[10px] text-slate-500 uppercase font-semibold block">RAM Footprint</span>
-              <span className="text-xl font-black text-slate-900 mt-1 block">&lt; 128 KB</span>
+              <span className="text-xl font-black text-slate-900 mt-1 block">
+                {edgeModelMeta?.file_size_kb != null ? `< ${Math.ceil(edgeModelMeta.file_size_kb / 64) * 64} KB` : '—'}
+              </span>
             </div>
 
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
               <span className="text-[10px] text-slate-500 uppercase font-semibold block">Energy Cost</span>
-              <span className="text-xl font-black text-amber-700 mt-1 block">0.12 mJ / infer</span>
+              <span className="text-xl font-black text-amber-700 mt-1 block">
+                {edgeModelMeta?.energy_consumption_estimate_mJ_per_infer != null
+                  ? `${edgeModelMeta.energy_consumption_estimate_mJ_per_infer} mJ / infer`
+                  : '—'}
+              </span>
             </div>
           </div>
         </div>

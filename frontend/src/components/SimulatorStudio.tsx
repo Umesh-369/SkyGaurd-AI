@@ -14,7 +14,6 @@ import {
   ShieldAlert, 
   Gauge, 
   SlidersHorizontal,
-  Trash2,
   ShieldCheck
 } from 'lucide-react';
 import { useSkyGuardStore } from '../store/useSkyGuardStore';
@@ -32,7 +31,6 @@ export const SimulatorStudio: React.FC = () => {
     setSimSpeed,
     injectFault,
     clearFaults,
-    clearActiveAnomalies,
     connectWebSocket,
     fetchInitialData
   } = useSkyGuardStore();
@@ -79,16 +77,6 @@ export const SimulatorStudio: React.FC = () => {
     }
   };
 
-  const handleClearAnomalies = async () => {
-    setLoadingAction('CLEAR_ANOMALIES');
-    try {
-      await clearActiveAnomalies();
-      notify('ACTIVE FEED CLEARED: Active anomaly cards cleared. Historical log and baseline simulation preserved.');
-    } finally {
-      setLoadingAction(null);
-    }
-  };
-
   const handleSpeed = async (spd: number) => {
     await setSimSpeed(spd);
     notify(`SPEED UPDATED: Simulation update cadence set to ${spd}× realtime.`);
@@ -97,28 +85,8 @@ export const SimulatorStudio: React.FC = () => {
   const handleTrigger = async (faultType: string, param: string, mag: number) => {
     setLoadingAction(faultType);
     try {
-      // Execute fault injection
+      // Execute fault injection with instant state update
       await injectFault(selectedStationId, faultType, param, mag);
-      
-      // Post to secondary endpoint alias for redundancy
-      try {
-        await fetch('/api/simulator/inject-fault', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            station_id: selectedStationId,
-            fault_type: faultType,
-            parameter: param,
-            magnitude: mag,
-            duration_steps: 30
-          })
-        });
-      } catch (err) {
-        // Fallback endpoint notice
-      }
-
-      // Immediately refetch REST data to synchronize Zustand store across app
-      await fetchInitialData();
 
       const stName = stations.find(s => s.station_id === selectedStationId || s.id === selectedStationId)?.name || selectedStationId;
       notify(`FAULT INJECTED: '${faultType.toUpperCase()}' on ${stName} (${param.toUpperCase()} +${mag})`);
@@ -131,7 +99,6 @@ export const SimulatorStudio: React.FC = () => {
     setLoadingAction('CLEAR');
     try {
       await clearFaults();
-      await fetchInitialData();
       notify('CLEARED ALL INJECTIONS: All active fault modes reset to normal telemetry.');
     } finally {
       setLoadingAction(null);
@@ -203,17 +170,6 @@ export const SimulatorStudio: React.FC = () => {
             <span>{loadingAction === 'RESET' ? 'RESETTING...' : 'RESET BASELINE'}</span>
           </button>
 
-          {/* Clear Anomalies (Active Feed Reset Only) */}
-          <button
-            onClick={handleClearAnomalies}
-            disabled={loadingAction === 'CLEAR_ANOMALIES'}
-            className="flex items-center space-x-2 px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-mono font-bold transition-all duration-150 active:scale-95 shadow-sm cursor-pointer"
-            title="Clears displayed active anomaly cards without resetting simulator state or historical telemetry"
-          >
-            <Trash2 className="w-4 h-4" />
-            <span>{loadingAction === 'CLEAR_ANOMALIES' ? 'CLEARING...' : 'CLEAR ANOMALIES'}</span>
-          </button>
-
           {/* Speed Multiplier Selector */}
           <div className="flex items-center space-x-1.5 pl-3 border-l border-slate-300">
             <SlidersHorizontal className="w-4 h-4 text-sky-700 shrink-0" />
@@ -261,15 +217,6 @@ export const SimulatorStudio: React.FC = () => {
         </div>
         <div className="flex items-center space-x-2">
           <button
-            onClick={handleClearAnomalies}
-            disabled={loadingAction === 'CLEAR_ANOMALIES'}
-            className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-mono font-bold transition-all duration-150 active:scale-95 shadow-sm cursor-pointer flex items-center space-x-1.5"
-            title="Clear active anomaly display feed"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>{loadingAction === 'CLEAR_ANOMALIES' ? 'CLEARING FEED...' : 'CLEAR ANOMALIES'}</span>
-          </button>
-          <button
             onClick={handleClear}
             disabled={loadingAction === 'CLEAR'}
             className="px-3.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-xs font-mono font-bold transition-all duration-150 active:scale-95 shadow-sm cursor-pointer"
@@ -283,9 +230,9 @@ export const SimulatorStudio: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stations.map((st) => {
           const liveR = liveReadings.find(r => r.station_id === st.station_id || r.station_id === st.id);
-          const temp = liveR ? liveR.temperature : (st.last_reading?.temperature ?? 28.5);
-          const press = liveR ? liveR.pressure : (st.last_reading?.pressure ?? 1012.0);
-          const humid = liveR ? liveR.humidity : (st.last_reading?.humidity ?? 80.0);
+          const temp = liveR?.temperature ?? st.last_reading?.temperature;
+          const press = liveR?.pressure ?? st.last_reading?.pressure;
+          const humid = liveR?.humidity ?? st.last_reading?.humidity;
           const isAnom = liveR?.anomaly_evaluation?.is_anomaly;
 
           return (
@@ -313,15 +260,15 @@ export const SimulatorStudio: React.FC = () => {
               <div className="space-y-2 font-mono text-xs mt-4">
                 <div className="flex justify-between items-center text-slate-700">
                   <span className="text-slate-500">Temp:</span>
-                  <span className="font-bold text-sky-800">{temp.toFixed(1)} °C</span>
+                  <span className="font-bold text-sky-800">{temp != null ? `${temp.toFixed(1)} °C` : '—'}</span>
                 </div>
                 <div className="flex justify-between items-center text-slate-700">
                   <span className="text-slate-500">Pressure:</span>
-                  <span className="font-bold text-sky-800">{press.toFixed(1)} hPa</span>
+                  <span className="font-bold text-sky-800">{press != null ? `${press.toFixed(1)} hPa` : '—'}</span>
                 </div>
                 <div className="flex justify-between items-center text-slate-700">
                   <span className="text-slate-500">Humidity:</span>
-                  <span className="font-bold text-sky-800">{humid.toFixed(1)} %</span>
+                  <span className="font-bold text-sky-800">{humid != null ? `${humid.toFixed(1)} %` : '—'}</span>
                 </div>
               </div>
 
@@ -403,7 +350,7 @@ export const SimulatorStudio: React.FC = () => {
               Injects extreme positive thermal step change (+{magnitude}°C). Evaluates rapid rate-of-change detection.
             </p>
             <button
-              onClick={() => handleTrigger('temperature_spike', selectedParam, magnitude)}
+              onClick={() => handleTrigger('temperature_spike', 'temperature', magnitude)}
               disabled={loadingAction === 'temperature_spike'}
               className="w-full py-2.5 bg-red-600 hover:bg-red-700 active:scale-95 text-white font-mono font-bold text-xs rounded-xl transition-all duration-150 shadow-sm cursor-pointer flex items-center justify-center space-x-2"
             >
@@ -423,7 +370,7 @@ export const SimulatorStudio: React.FC = () => {
               Injects sharp thermal drop (-{magnitude}°C). Tests thermal depression fault thresholding.
             </p>
             <button
-              onClick={() => handleTrigger('temperature_drop', selectedParam, magnitude)}
+              onClick={() => handleTrigger('temperature_drop', 'temperature', magnitude)}
               disabled={loadingAction === 'temperature_drop'}
               className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-mono font-bold text-xs rounded-xl transition-all duration-150 shadow-sm cursor-pointer flex items-center justify-center space-x-2"
             >
@@ -443,7 +390,7 @@ export const SimulatorStudio: React.FC = () => {
               Simulates rapid barometric pressure drop (-{magnitude} hPa). Tests physical sensor bounds check.
             </p>
             <button
-              onClick={() => handleTrigger('pressure_drop', selectedParam, magnitude)}
+              onClick={() => handleTrigger('pressure_drop', 'pressure', magnitude)}
               disabled={loadingAction === 'pressure_drop'}
               className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-mono font-bold text-xs rounded-xl transition-all duration-150 shadow-sm cursor-pointer flex items-center justify-center space-x-2"
             >
@@ -463,7 +410,7 @@ export const SimulatorStudio: React.FC = () => {
               Injects rapid relative humidity surge (+{magnitude}% RH). Tests moisture saturation limits.
             </p>
             <button
-              onClick={() => handleTrigger('humidity_spike', selectedParam, magnitude)}
+              onClick={() => handleTrigger('humidity_spike', 'humidity', magnitude)}
               disabled={loadingAction === 'humidity_spike'}
               className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-mono font-bold text-xs rounded-xl transition-all duration-150 shadow-sm cursor-pointer flex items-center justify-center space-x-2"
             >

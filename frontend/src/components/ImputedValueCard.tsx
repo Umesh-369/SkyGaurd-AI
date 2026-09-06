@@ -33,17 +33,25 @@ export const ImputedValueCard: React.FC<ImputedValueCardProps> = ({ imputation }
 
         <div className="bg-red-50/40 p-3.5 rounded-xl border border-red-200">
           <span className="text-red-700 uppercase font-semibold text-[10px] block">Flagged Reading</span>
-          <span className="font-extrabold text-red-700 text-sm mt-1 block truncate">{imputation.original_value}</span>
+          <span className="font-extrabold text-red-700 text-sm mt-1 block truncate">
+            {typeof imputation.original_value === 'number' ? imputation.original_value.toFixed(2) : imputation.original_value}
+          </span>
         </div>
 
         <div className="bg-emerald-50/40 p-3.5 rounded-xl border border-emerald-200">
           <span className="text-emerald-700 uppercase font-semibold text-[10px] block">Corrected Value</span>
-          <span className="font-extrabold text-emerald-700 text-sm mt-1 block truncate">{imputation.corrected_value}</span>
+          <span className="font-extrabold text-emerald-700 text-sm mt-1 block truncate">
+            {typeof imputation.corrected_value === 'number' ? imputation.corrected_value.toFixed(2) : imputation.corrected_value}
+          </span>
         </div>
 
         <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200">
           <span className="text-slate-500 uppercase font-semibold text-[10px] block">Correction Delta</span>
-          <span className="font-extrabold text-sky-700 text-sm mt-1 block truncate">{imputation.difference > 0 ? `+${imputation.difference}` : imputation.difference}</span>
+          <span className="font-extrabold text-sky-700 text-sm mt-1 block truncate">
+            {typeof imputation.difference === 'number'
+              ? (imputation.difference > 0 ? `+${imputation.difference.toFixed(2)}` : imputation.difference.toFixed(2))
+              : imputation.difference}
+          </span>
         </div>
       </div>
 

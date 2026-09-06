@@ -41,7 +41,9 @@ export const AnomaliesView: React.FC<AnomaliesViewProps> = ({ selectedAnomaly })
 
   const ifScoreDisplay = isDeterministic
     ? 'N/A (Bypassed ML)'
-    : `${selectedAnomaly.isolation_forest_score.toFixed(4)} (Threshold: -0.0200)`;
+    : typeof selectedAnomaly.isolation_forest_score === 'number'
+    ? `${selectedAnomaly.isolation_forest_score.toFixed(4)} (Threshold: -0.0200)`
+    : 'N/A';
 
   return (
     <div className="space-y-6 font-sans min-w-0 w-full">
@@ -143,15 +145,21 @@ export const AnomaliesView: React.FC<AnomaliesViewProps> = ({ selectedAnomaly })
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 font-mono">
           <div className="bg-slate-50/80 hover:bg-slate-50 transition-colors p-4 rounded-xl border border-slate-200">
             <span className="text-xs text-slate-600 uppercase block font-semibold">Temperature Reading</span>
-            <span className="text-xl font-black text-slate-900 mt-1 block">{selectedAnomaly.readings.temperature.toFixed(1)} °C</span>
+            <span className="text-xl font-black text-slate-900 mt-1 block">
+              {typeof selectedAnomaly.readings?.temperature === 'number' ? `${selectedAnomaly.readings.temperature.toFixed(1)} °C` : 'N/A'}
+            </span>
           </div>
           <div className="bg-slate-50/80 hover:bg-slate-50 transition-colors p-4 rounded-xl border border-slate-200">
             <span className="text-xs text-slate-600 uppercase block font-semibold">Pressure Reading</span>
-            <span className="text-xl font-black text-slate-900 mt-1 block">{selectedAnomaly.readings.pressure.toFixed(1)} hPa</span>
+            <span className="text-xl font-black text-slate-900 mt-1 block">
+              {typeof selectedAnomaly.readings?.pressure === 'number' ? `${selectedAnomaly.readings.pressure.toFixed(1)} hPa` : 'N/A'}
+            </span>
           </div>
           <div className="bg-slate-50/80 hover:bg-slate-50 transition-colors p-4 rounded-xl border border-slate-200">
             <span className="text-xs text-slate-600 uppercase block font-semibold">Humidity Reading</span>
-            <span className="text-xl font-black text-slate-900 mt-1 block">{selectedAnomaly.readings.humidity.toFixed(1)} %</span>
+            <span className="text-xl font-black text-slate-900 mt-1 block">
+              {typeof selectedAnomaly.readings?.humidity === 'number' ? `${selectedAnomaly.readings.humidity.toFixed(1)} %` : 'N/A'}
+            </span>
           </div>
         </div>
       </div>

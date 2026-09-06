@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion } from 'framer-motion';
 import { StationMap } from '../components/StationMap';
 import { Station3DMap } from '../components/Station3DMap';
 import { SHAPChart } from '../components/SHAPChart';
@@ -45,7 +46,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onNavigateTab,
   is3DMode: initial3DMode = true
 }) => {
-  const { readingHistory, isSimulating } = useSkyGuardStore();
+  const { readingHistory, isSimulating, wsConnected } = useSkyGuardStore();
   const [selectedStationId, setSelectedStationId] = useState<string>('AWS-01');
   const [is3DView, setIs3DView] = useState<boolean>(initial3DMode);
 
@@ -103,12 +104,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       ];
 
   // Active Anomaly Evaluation for Selected Station
-  const selectedStationAnom = anomalies.find(a => (a.station_id === selectedStation.station_id || a.station_id === selectedStation.id) && a.is_anomaly);
   const currentEval = currentLiveReading?.anomaly_evaluation;
-  const isAnomActive = Boolean(selectedStationAnom || currentEval?.is_anomaly);
+  const isLiveAnom = Boolean(currentEval?.is_anomaly || (currentLiveReading?.injected_fault_type && currentLiveReading.injected_fault_type !== 'NONE'));
+  const selectedStationAnom = isLiveAnom
+    ? (anomalies.find(a => (a.station_id === selectedStation.station_id || a.station_id === selectedStation.id) && a.is_anomaly) || null)
+    : null;
+  const isAnomActive = isLiveAnom;
 
-  const rawScore = selectedStationAnom ? Math.abs(selectedStationAnom.isolation_forest_score || 0.35) : (currentEval ? Math.abs(currentEval.isolation_forest_score || 0) : 0);
-  const displayAnomalyScore = Number(Math.min(1.0, isAnomActive ? Math.max(0.45, rawScore) : 0.0).toFixed(2));
+  const rawScore = currentEval
+    ? Math.abs(currentEval.isolation_forest_score || 0)
+    : (selectedStationAnom ? Math.abs(selectedStationAnom.isolation_forest_score || 0.35) : 0);
+  const displayAnomalyScore = Number(Math.min(1.0, isAnomActive ? Math.max(0.45, rawScore) : 0.05).toFixed(2));
   const anomalyScoreOffset = Math.round(125 * (1 - displayAnomalyScore));
 
   const rootCauseText = (selectedStationAnom?.root_cause || currentEval?.root_cause || (currentLiveReading?.injected_fault_type !== 'NONE' ? currentLiveReading?.injected_fault_type : 'NONE') || '').toLowerCase();
@@ -126,15 +132,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     ? Math.round(selectedStationAnom.confidence * 100) 
     : currentEval && currentEval.confidence !== null && currentEval.confidence !== undefined
     ? Math.round(currentEval.confidence * 100) 
-    : 100;
+    : 95;
 
-  const reasonText = selectedStationAnom
-    ? `Flagged ${selectedStationAnom.root_cause} with score ${selectedStationAnom.isolation_forest_score.toFixed(3)}.`
-    : currentEval && currentEval.is_anomaly
-    ? `Live stream detected ${currentEval.root_cause || 'anomaly'}.`
+  const reasonText = isAnomActive && selectedStationAnom
+    ? (selectedStationAnom.why_detected || `Flagged ${selectedStationAnom.root_cause || 'anomaly'}.`)
+    : isAnomActive && currentEval && currentEval.is_anomaly
+    ? (currentEval.why_detected || `Live stream detected ${currentEval.root_cause || 'anomaly'}.`)
     : 'All sensor readings within expected operational range.';
 
-  const activeAnomalyRecord = selectedStationAnom || anomalies[0];
+  const activeAnomalyRecord = selectedStationAnom;
 
   return (
     <div className="space-y-6 pb-12 font-sans text-slate-900">
@@ -196,7 +202,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </div>
           <div className="mt-2">
             <div className="text-3xl font-extrabold text-slate-900 tracking-tight font-mono">
-              0{activeAnomaliesCount}
+              {String(activeAnomaliesCount).padStart(2, '0')}
             </div>
             <div className={`text-xs font-semibold flex items-center space-x-1.5 mt-1 font-mono ${
               activeAnomaliesCount > 0 ? 'text-red-700' : 'text-emerald-700'
@@ -305,11 +311,28 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               </p>
             </div>
 
-            <div className="flex items-center space-x-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full text-xs font-mono font-bold">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>NORMAL</span>
-            </div>
-          </div>
+          {/* Dynamic station status badge — reflects real anomaly/health state */}
+          {(() => {
+            const stHealth = selectedStation.health?.overall_health_score ?? 100;
+            const stLabel = isAnomActive ? 'ANOMALY' : stHealth < 75 ? 'DEGRADED' : 'NORMAL';
+            const stColor = isAnomActive
+              ? 'bg-red-50 border-red-200 text-red-700'
+              : stHealth < 75
+              ? 'bg-amber-50 border-amber-200 text-amber-700'
+              : 'bg-emerald-50 border-emerald-200 text-emerald-700';
+            const stDot = isAnomActive
+              ? 'bg-red-500 animate-ping'
+              : stHealth < 75
+              ? 'bg-amber-500 animate-pulse'
+              : 'bg-emerald-500 animate-pulse';
+            return (
+              <div className={`flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold border ${stColor}`}>
+                <span className={`w-2 h-2 rounded-full ${stDot}`}></span>
+                <span>{stLabel}</span>
+              </div>
+            );
+          })()}
+        </div>
 
           {/* 3 Parameter Readout Cards */}
           <div className="grid grid-cols-3 gap-3 font-sans">
@@ -411,17 +434,95 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         <Tier1DetectionCard
           selectedStation={selectedStation}
           currentReading={currentLiveReading}
-          activeAnomaly={selectedStationAnom}
+          activeAnomaly={selectedStationAnom || undefined}
         />
 
-        <div className="hidden lg:flex absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white border border-sky-300 shadow-md items-center justify-center text-sky-700">
-          <ArrowRight className="w-4 h-4" />
+        {/* Dynamic AI Cascade Pipeline Stream Connector */}
+        <div className="hidden lg:flex flex-col items-center justify-center absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-auto group">
+          {/* Subtle Data Stream Laser Line behind beacon */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-28 h-[2px] bg-gradient-to-r from-sky-400 via-sky-300 to-emerald-400 -z-10 pointer-events-none opacity-70 overflow-hidden rounded-full">
+            <motion.div
+              className="w-8 h-full bg-white shadow-[0_0_8px_#38bdf8]"
+              animate={{ x: [-32, 112] }}
+              transition={{ repeat: Infinity, duration: 1.8, ease: 'easeInOut' }}
+            />
+          </div>
+
+          {/* Radiating Ripple Rings */}
+          <div className="relative flex items-center justify-center">
+            <motion.div
+              animate={{ scale: [1, 1.85, 2.2], opacity: [0.65, 0.2, 0] }}
+              transition={{ repeat: Infinity, duration: 2.2, ease: 'easeOut' }}
+              className={`absolute w-10 h-10 rounded-full ${
+                isAnomActive && displayAnomalyScore > 0.6
+                  ? 'bg-red-400/40'
+                  : isAnomActive
+                  ? 'bg-amber-400/40'
+                  : 'bg-sky-400/40'
+              }`}
+            />
+            <motion.div
+              animate={{ scale: [1, 1.5], opacity: [0.45, 0] }}
+              transition={{ repeat: Infinity, duration: 2.2, delay: 0.7, ease: 'easeOut' }}
+              className={`absolute w-10 h-10 rounded-full ${
+                isAnomActive && displayAnomalyScore > 0.6
+                  ? 'bg-red-400/30'
+                  : isAnomActive
+                  ? 'bg-amber-400/30'
+                  : 'bg-sky-400/30'
+              }`}
+            />
+
+            {/* Central Beacon Disc */}
+            <div
+              className={`relative w-10 h-10 rounded-full bg-white/95 backdrop-blur-sm border shadow-md flex items-center justify-center transition-all duration-300 group-hover:scale-110 ${
+                isAnomActive && displayAnomalyScore > 0.6
+                  ? 'border-red-400 text-red-600 shadow-[0_0_14px_rgba(239,68,68,0.35)]'
+                  : isAnomActive
+                  ? 'border-amber-400 text-amber-600 shadow-[0_0_12px_rgba(245,158,11,0.3)]'
+                  : 'border-sky-300 text-sky-700 shadow-[0_0_12px_rgba(14,165,233,0.25)]'
+              }`}
+              title="Tier 1 Anomaly Isolation cascades directly into Tier 2 Risk Engine"
+            >
+              <motion.div
+                animate={{ x: [-2, 3, -2] }}
+                transition={{ repeat: Infinity, duration: 1.4, ease: 'easeInOut' }}
+                className="flex items-center justify-center"
+              >
+                <ArrowRight className="w-4 h-4" />
+              </motion.div>
+            </div>
+          </div>
+
+          {/* Floating Pipeline Badge */}
+          <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap pointer-events-none transition-opacity duration-200">
+            <span
+              className={`inline-flex items-center text-[8px] font-mono font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full border shadow-xs bg-white/95 ${
+                isAnomActive && displayAnomalyScore > 0.6
+                  ? 'text-red-700 border-red-200'
+                  : isAnomActive
+                  ? 'text-amber-700 border-amber-200'
+                  : 'text-sky-700 border-sky-200'
+              }`}
+            >
+              <span
+                className={`w-1 h-1 rounded-full mr-1 ${
+                  isAnomActive && displayAnomalyScore > 0.6
+                    ? 'bg-red-500 animate-ping'
+                    : isAnomActive
+                    ? 'bg-amber-500 animate-pulse'
+                    : 'bg-emerald-500'
+                }`}
+              />
+              AI CASCADE
+            </span>
+          </div>
         </div>
 
         <Tier2RiskCard
           selectedStation={selectedStation}
           currentReading={currentLiveReading}
-          activeAnomaly={selectedStationAnom}
+          activeAnomaly={selectedStationAnom || undefined}
         />
       </div>
 
@@ -434,19 +535,22 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             <span>SYSTEM ALERTS</span>
           </span>
 
+          {/* Dynamic: anomaly status */}
           <div className="flex items-center space-x-2 text-slate-700 font-medium">
-            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span>All systems operational</span>
+            <span className={`w-2 h-2 rounded-full ${activeAnomaliesCount > 0 ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'}`}></span>
+            <span>{activeAnomaliesCount > 0 ? `${activeAnomaliesCount} active anomal${activeAnomaliesCount > 1 ? 'ies' : 'y'} flagged` : 'All systems nominal'}</span>
           </div>
 
+          {/* Dynamic: WebSocket connection */}
           <div className="flex items-center space-x-2 text-slate-700 font-medium">
-            <span className="w-2 h-2 rounded-full bg-sky-600"></span>
-            <span>No active anomalies</span>
+            <span className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-sky-600' : 'bg-amber-500 animate-pulse'}`}></span>
+            <span>{wsConnected ? 'WebSocket connected' : 'WebSocket reconnecting...'}</span>
           </div>
 
+          {/* Dynamic: simulation state */}
           <div className="flex items-center space-x-2 text-slate-700 font-medium">
-            <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
-            <span>Weather API synced</span>
+            <span className={`w-2 h-2 rounded-full ${isSimulating ? 'bg-indigo-600' : 'bg-slate-400'}`}></span>
+            <span>{isSimulating ? 'Simulation streaming' : 'Simulation paused'}</span>
           </div>
         </div>
 
@@ -472,7 +576,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         <ShapBreakdown
           selectedStation={selectedStation}
           currentReading={currentLiveReading}
-          activeAnomaly={selectedStationAnom}
+          activeAnomaly={selectedStationAnom || undefined}
         />
 
         {activeAnomaliesCount > 0 && activeAnomalyRecord && (
@@ -486,3 +590,4 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     </div>
   );
 };
+
