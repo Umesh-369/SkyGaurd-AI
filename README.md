@@ -3,7 +3,7 @@
 # 🛡️ SkyGuard AI
 ### **Autonomous Meteorological Intelligence & Real-Time AWS Sensor Diagnostics**
 
-[![SIH Problem Statement](https://img.shields.io/badge/SIH%202024-Problem%20Statement%2026073-0284c7?style=for-the-badge&logo=gov.in)](https://github.com/Umesh-369/SkyGaurd-AI)
+[![SIH Problem Statement](https://img.shields.io/badge/SIH%202026-Problem%20Statement%2026073-0284c7?style=for-the-badge&logo=gov.in)](https://github.com/Umesh-369/SkyGaurd-AI)
 [![OpenML Dataset](https://img.shields.io/badge/OpenML-Dataset%2043409%20(Goa%20Historical)-059669?style=for-the-badge&logo=python)](https://www.openml.org/d/43409)
 [![Kaggle Dataset](https://img.shields.io/badge/Kaggle-Indian%20Climate%20Dataset%202024--2025-20BEFF?style=for-the-badge&logo=kaggle)](https://www.kaggle.com/datasets/ankushnarwade/indian-climate-dataset-20242025)
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI%20%7C%20Python%203.11-009688?style=for-the-badge&logo=fastapi)](backend/)
