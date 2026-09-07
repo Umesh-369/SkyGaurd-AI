@@ -7,15 +7,15 @@
 [![OpenML Dataset](https://img.shields.io/badge/OpenML-Dataset%2043409%20(Goa%20Historical)-059669?style=for-the-badge&logo=python)](https://www.openml.org/d/43409)
 [![Kaggle Dataset](https://img.shields.io/badge/Kaggle-Indian%20Climate%20Dataset%202024--2025-20BEFF?style=for-the-badge&logo=kaggle)](https://www.kaggle.com/datasets/ankushnarwade/indian-climate-dataset-20242025)
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI%20%7C%20Python%203.11-009688?style=for-the-badge&logo=fastapi)](backend/)
+[![Scikit-Learn](https://img.shields.io/badge/ML-Scikit--Learn%20%7C%20TreeSHAP-F7931E?style=for-the-badge&logo=scikitlearn)](ml/)
 [![React](https://img.shields.io/badge/Frontend-React%2018%20%7C%20Vite%20%7C%20Tailwind-61DAFB?style=for-the-badge&logo=react)](frontend/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?style=for-the-badge&logo=typescript)](frontend/)
-[![Edge AI](https://img.shields.io/badge/Edge%20AI-Quantized%20ONNX%20%7C%20ESP32-f59e0b?style=for-the-badge&logo=cpu)](ml/)
 [![Docker](https://img.shields.io/badge/Docker-Ready%20%7C%20Compose-2496ED?style=for-the-badge&logo=docker)](docker-compose.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 
 <br/>
 
-**[⚡ Executive Summary](#-executive-summary) • [✨ Key Capabilities](#-key-capabilities) • [🏗️ Architecture](#️-system-architecture) • [🧠 Neural Topology](#-2d-neural-network-topology-mesh) • [📊 ML & Edge Benchmarks](#-ml-performance--edge-ai-benchmarks) • [📡 API Reference](#-api--websocket-reference) • [🚀 Quick Start](#-quick-start-guide) • [🐳 Docker](#-docker-deployment) • [📂 Project Structure](#-repository-structure)**
+**[⚡ Executive Summary](#-executive-summary) • [✨ Key Capabilities](#-key-capabilities) • [🏗️ Architecture](#️-system-architecture) • [🧠 Neural Topology](#-2d-neural-network-topology-mesh) • [📊 ML Benchmarks](#-ml-performance--model-benchmarks) • [📡 API Reference](#-api--websocket-reference) • [🚀 Quick Start](#-quick-start-guide) • [🐳 Docker](#-docker-deployment) • [📂 Project Structure](#-repository-structure)**
 
 <br/>
 
@@ -28,7 +28,7 @@
 **Automatic Weather Stations (AWS)** deployed across critical meteorological, agricultural, aerospace, and disaster-response corridors frequently suffer from **hardware sensor degradation, zero-variance flatlines, calibration drift, and transient electrical spikes**. Unfiltered anomalous telemetry contaminates downstream numerical weather prediction (NWP) models, early warning triggers, and emergency dispatch systems.
 
 **SkyGuard AI** delivers an end-to-end, production-grade 2-Tier AI intelligence architecture built for **Smart India Hackathon (SIH) — Problem Statement 26073**:
-1. **Tier 1 (Core Sensor Isolation & Diagnostics)**: Evaluates core physical sensor parameters (**Temperature**, **Atmospheric Pressure**, **Relative Humidity**) in real time using a multivariate **IsolationForest** trained on **108,096 historical hourly observations from OpenML Dataset 43409 (Goa)** with zero temporal leakage, augmented by the **Indian Climate Dataset (2024–2025)**. Flags faults with instant **TreeSHAP explainability**, triggers **physics-guided spatio-temporal EMA value imputation**, and validates spatial consensus across neighboring stations within a 50 km radius.
+1. **Tier 1 (Core Sensor Isolation & Diagnostics)**: Evaluates core physical sensor parameters (**Temperature**, **Atmospheric Pressure**, **Relative Humidity**) in real time using a multivariate **IsolationForest** trained on **108,096 historical hourly observations from OpenML Dataset 43409 (Goa)** with zero temporal leakage, augmented by the **Indian Climate Dataset (2024–2025)** from Kaggle. Flags faults with instant **TreeSHAP explainability**, triggers **physics-guided spatio-temporal EMA value imputation**, and validates spatial consensus across neighboring stations within a 50 km radius.
 2. **Tier 2 (Hazard & Disaster Intelligence)**: Fuses validated AWS telemetry with regional meteorological context (Rainfall, Wind Speed) to dynamically quantify **Coastal Flood**, **Heatwave Thermal Stress**, and **Severe Storm/Cyclone** threat levels.
 
 ```
@@ -48,8 +48,8 @@
 
 ### 🛡️ Tier 1: Sensor Anomaly Detection & Diagnostics
 * **Multivariate IsolationForest Engine**: Evaluates cross-correlations across primary atmospheric variables (**Temperature**, **Atmospheric Pressure**, **Relative Humidity**) and dynamic differential features ($\Delta T, \Delta P, \Delta \text{RH}$) without synthetic heuristic thresholds.
-* **Strict Chronological Zero-Leak Partitioning**: Trained on 108,096 historical hourly observations from **OpenML Dataset 43409 (Goa Sector)** using 80/20 chronological splits to eliminate lookahead bias.
-* **TreeSHAP Root-Cause Explainability**: Generates real-time attribution weights for every detected anomalous reading, pinning down the exact malfunctioning physical sensor.
+* **Dual-Source Dataset Pipeline**: Trained with zero lookahead bias across 108,096 chronological hourly samples from **OpenML Dataset 43409 (Goa Sector)**, supplemented with the **Kaggle Indian Climate Dataset (2024–2025)** merged strictly on validated physical parameters.
+* **TreeSHAP Root-Cause Explainability**: Generates real-time attribution weights for every detected anomalous reading, pinpointing the exact malfunctioning physical sensor.
 * **Physics-Guided Spatio-Temporal Imputation**: Automatically estimates corrected sensor values via combined Inverse-Distance Weighting (IDW) across neighboring AWS nodes and Exponential Moving Averages (EMA).
 * **Spatial Consensus Verification**: Evaluates neighbor stations within a 50 km geographic radius to differentiate isolated hardware sensor faults from regional macro-climatic events.
 
@@ -71,9 +71,8 @@
   6. 🧊 **Stuck / Frozen Sensor**: Zero-variance flatline condition.
   7. 🚨 **Multivariate Severe Fault**: Correlated simultaneous multi-sensor failure.
 
-### ⚡ Edge AI Microcontroller Execution Profile
-* **Quantized ONNX Model**: Ultra-compact binary (**90.14 KB**) exportable for embedded hardware (ESP32, ESP32-S3, ARM Cortex-M4/STM32).
-* **Ultra-Low Latency & Memory Footprint**: **8.087 ms** per inference with **< 128 KB SRAM** consumption, facilitating on-device anomaly filtering before wireless packet transmission.
+### 🇮🇳 National Historical Telemetry Replay Engine
+* **Empirical Weather Replay**: Integrates the **Kaggle Indian Climate Dataset (2024–2025)** to replay genuine historical meteorological records across major Indian metropolitan centers with recorded temperature, pressure, humidity, wind velocity, rainfall, and Air Quality Index (AQI).
 
 ---
 
@@ -81,39 +80,39 @@
 
 ```mermaid
 flowchart TB
-    subgraph DataLayer ["Data Ingestion & OpenML Goa 43409"]
-        D1["OpenML 43409 (108K Hourly Records)"] --> D2["Chronological 80/20 Zero-Leak Split"]
-        D2 --> D3["Feature Engineering: ΔT, ΔP, ΔRH, Diurnal Baseline"]
+    subgraph DataLayer ["Dual-Dataset Ingestion & Harmonization"]
+        D1["OpenML Dataset 43409<br/>(108K Hourly Records · Goa Sector)"]
+        D2["Kaggle Indian Climate Dataset<br/>(2024–2025 National Cities Telemetry)"]
+        D1 --> D3["Multi-Source Data Ingestion & Normalization"]
+        D2 --> D3
+        D3 --> D4["Chronological 80/20 Zero-Leak Partition"]
+        D4 --> D5["Feature Engineering: ΔT, ΔP, ΔRH & Diurnal Baselines"]
     end
 
-    subgraph MLLayer ["Machine Learning & Explainability Core"]
-        D3 --> ML1["IsolationForest (Contamination=0.05)"]
-        ML1 --> ML2["TreeSHAP Feature Explainer"]
+    subgraph MLLayer ["Machine Learning & Explainability Core (Python / Scikit-Learn)"]
+        D5 --> ML1["IsolationForest Model (tier1_isolation_forest.pkl)"]
+        ML1 --> ML2["TreeSHAP Root-Cause Explainer"]
         ML1 --> ML3["Physics Spatio-Temporal Imputer (IDW + EMA)"]
-        ML1 --> ML4["Spatial Consensus Engine (50km Radius)"]
-        ML1 --> ML5["Quantized ONNX Export (90.14 KB)"]
+        ML1 --> ML4["Spatial Consensus Engine (50km Neighbor Radius)"]
+        ML1 --> ML5["Sensor Degradation & Calibration Drift Watchdog"]
     end
 
-    subgraph BackendLayer ["FastAPI Async Core & WebSockets"]
-        ML1 --> B1["FastAPI REST Router (/api/v1)"]
+    subgraph BackendLayer ["FastAPI Async Backend & WebSocket Streamer"]
+        ML1 --> B1["FastAPI REST Routers (/api/v1)"]
         ML2 --> B1
         ML3 --> B1
         ML4 --> B1
         B1 --> B2["WebSocket Telemetry Streamer (/ws/readings)"]
-        B1 --> B3["Virtual AWS Mesh Hardware Simulator"]
+        B1 --> B3["Virtual AWS Mesh Simulator (14 Nodes · 7 Fault Modes)"]
+        B1 --> B4["National Historical Telemetry Replay Engine"]
     end
 
     subgraph FrontendLayer ["Modern React 18 + Vite Command Center"]
-        B2 --> F1["Zustand State Store (In-Place Deduplication)"]
-        F1 --> F2["2D Neural Topology Graph"]
-        F1 --> F3["Tier 1 Diagnostics & Tier 2 Risk Cards"]
-        F1 --> F4["Real-Time Anomaly Stream & SHAP Studio"]
-        F1 --> F5["Interactive Simulator Fault Injection Control"]
-    end
-
-    subgraph EdgeLayer ["Edge AI Microcontroller Spec"]
-        ML5 --> E1["ESP32 / Cortex-M4 Microcontroller"]
-        E1 --> E2["8.08ms Inference • <128KB SRAM • >3yr Battery Life"]
+        B2 --> F1["Zustand Reactive Store (In-Place Deduplication)"]
+        F1 --> F2["2D Neural Network Topology Graph"]
+        F1 --> F3["Tier 1 Diagnostics & Tier 2 Hazard Cards"]
+        F1 --> F4["Real-Time Anomaly Feed & SHAP Studio"]
+        F1 --> F5["Interactive Fault Injection Control Studio"]
     end
 ```
 
@@ -145,20 +144,19 @@ SkyGuard AI visualizes the AWS station mesh as an interactive, collision-free **
 
 ---
 
-## 📊 ML Performance & Edge AI Benchmarks
+## 📊 ML Performance & Model Benchmarks
 
 | Evaluation Metric | Score / Benchmark | Provenance & Validation |
 | :--- | :--- | :--- |
-| **Model Algorithm** | Multivariate IsolationForest ($\alpha=0.05$) | Scikit-Learn + ONNX Runtime Micro |
-| **Training Dataset** | OpenML Dataset 43409 (Goa Sector) | 108,096 Chronological Hourly Readings |
+| **Model Algorithm** | Multivariate IsolationForest ($\alpha=0.045$) | Scikit-Learn + Joblib (`tier1_isolation_forest.pkl`) |
+| **Training Datasets** | OpenML 43409 + Kaggle Indian Climate | 108K+ Chronological Hourly & City Records |
 | **Precision** | **0.942** | 20% Chronological Holdout Set |
 | **Recall** | **0.918** | 20% Chronological Holdout Set |
 | **F1-Score** | **0.930** | Harmonic Mean Validation |
 | **ROC-AUC Score** | **0.965** | Binary Discriminator ROC Metric |
-| **ONNX Artifact Size** | **90.14 KB** | `skyguard_tier1_lite.onnx` Quantized |
-| **Edge Inference Latency** | **8.087 ms** | Simulated ESP32 Microcontroller |
-| **SRAM Memory Peak** | **~96 KB (< 128 KB)** | Microcontroller Ready (Cortex-M4/ESP32) |
-| **Energy / Inference** | **~0.12 mJ** | Deep Sleep Duty Cycle Ready (>3yr battery) |
+| **Explainability** | **TreeSHAP** | Real-time feature attribution weights |
+| **Imputation Method** | **Hybrid IDW + EMA** | Spatio-temporal physics-guided estimation |
+| **Spatial Consensus** | **50 km Neighbor Radius** | Corroborates faults against neighboring AWS nodes |
 
 ---
 
@@ -342,20 +340,20 @@ SkyGaurd-AI/
 │   │   └── types.ts               # Full TypeScript domain typings
 ├── ml/                            # Machine Learning Intelligence Core
 │   ├── anomaly_detector.py        # Tier 1 IsolationForest inference engine
-│   ├── data_loader.py             # OpenML 43409 chronological data ingestion
+│   ├── data_loader.py             # OpenML 43409 + Kaggle Indian Climate data ingestion
 │   ├── degradation.py             # Sensor drift & degradation diagnostics
 │   ├── explainability.py          # Real-time TreeSHAP feature explainer
-│   ├── export_lite_model.py       # Quantized ONNX edge model export script
 │   ├── feature_extractor.py       # Differential & physical feature engineering
 │   ├── imputer.py                 # Hybrid IDW & EMA spatio-temporal imputer
 │   ├── train_pipeline.py          # Chronological 80/20 model training pipeline
-│   └── artifacts/                 # Serialized model weights, scalers & ONNX binaries
+│   └── artifacts/                 # Serialized model weights, scalers & metadata
 ├── simulator/                     # Virtual AWS Telemetry & Fault Generator
 │   └── aws_simulator.py           # 14-station continuous time-series stream engine
 ├── Dataset/                       # Indian Climate & OpenML 43409 Historical Data
-├── docs/                          # Architecture guides & edge deployment manuals
+│   └── Indian_Climate_Dataset_2024_2025.csv # Kaggle Indian National Climate Dataset
+├── docs/                          # Architecture guides & documentation
 │   ├── dataset_notes.md           # Dataset provenance & feature documentation
-│   └── edge-deployment.md         # Microcontroller firmware integration guide (C/C++)
+│   └── edge-deployment.md         # Microcontroller firmware feasibility guide
 ├── Dockerfile.backend             # Backend container configuration
 ├── Dockerfile.frontend            # Frontend container configuration
 ├── docker-compose.yml             # Multi-service container orchestration
@@ -381,5 +379,5 @@ pytest tests/ -v
 Distributed under the **MIT License**. See `LICENSE` for details.
 
 * **Smart India Hackathon (SIH)**: Developed for **Problem Statement 26073** (AI/ML-Based Intelligent Anomaly Detection for Automatic Weather Stations).
-* **Dataset Provenance**: Built and validated using **OpenML Dataset 43409** (Historical Hourly Goa Meteorological Telemetry) and the **Indian Climate Dataset (2024–2025)**.
+* **Dataset Provenance**: Built and validated using **OpenML Dataset 43409** (Historical Hourly Goa Meteorological Telemetry) and the **Kaggle Indian Climate Dataset (2024–2025)**.
 * **Maintained by**: [Umesh-369](https://github.com/Umesh-369)
