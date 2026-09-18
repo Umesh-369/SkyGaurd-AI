@@ -1,7 +1,7 @@
 """
-backend/routers/alerts.py
-Alert Engine and Notification Management router for SkyGuard AI.
-Thin API router delegating directly to backend.alerts.alert_service.
+backend/api/routers/alerts.py
+Thin REST endpoint for Alert Engine and Notifications.
+Delegates directly to backend.alerts.alert_service.
 """
 
 from fastapi import APIRouter

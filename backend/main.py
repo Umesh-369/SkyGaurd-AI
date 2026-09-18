@@ -2,25 +2,25 @@
 backend/main.py
 Main entry point for SkyGuard AI FastAPI application.
 Configures CORS, Database initialization, Router mounting, and WebSocket streaming endpoint.
-Enforces startup model schema verification and real-time prediction logging.
+Orchestrates background sensor telemetry loop with ML inference and SHAP explainability.
 """
 
 import asyncio
-import json
 import datetime
 import time
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from backend.config import settings
 from backend.database import db_manager
-from backend.routers import auth, stations, anomalies, simulator_router, risks, alerts, analytics
-from simulator.aws_simulator import simulator_instance
-from ml.anomaly_detector import detector_instance
-from ml.explainability import explainer_instance
-from ml.imputer import ValueImputer
-from backend.services.spatial_check import spatial_engine
-from backend.services.comm_monitor import comm_monitor
-from backend.services.ws_manager import manager
+from backend.api import api_router, manager
+from backend.simulator.simulator_service import simulator_service, simulator_instance
+from backend.anomaly_detection.detector_service import detector_service, detector_instance
+from backend.explainability.shap_service import shap_service
+from backend.explainability.imputer_service import imputer_service
+from backend.risk_engine.tier2_risk import disaster_risk_engine
+from backend.integrations.weather import weather_api_service
+from backend.telemetry.comm_monitor import comm_monitor
+from backend.incidents.incident_service import incident_service
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -39,16 +39,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount API Routers
-app.include_router(auth.router, prefix=settings.API_V1_STR)
-app.include_router(stations.router, prefix=settings.API_V1_STR)
-app.include_router(anomalies.router, prefix=settings.API_V1_STR)
-app.include_router(simulator_router.router, prefix=settings.API_V1_STR)
-app.include_router(risks.router, prefix=settings.API_V1_STR)
-app.include_router(alerts.router, prefix=settings.API_V1_STR)
-app.include_router(analytics.router, prefix=settings.API_V1_STR)
-
-imputer = ValueImputer()
+# Mount Thin API Routers
+app.include_router(api_router, prefix=settings.API_V1_STR)
 
 
 @app.on_event("startup")
@@ -57,28 +49,19 @@ async def startup_event():
     print("      SKYGUARD AI BACKEND SERVICE INITIALIZATION                  ")
     print("==================================================================")
     await db_manager.connect()
-    
-    # 1. Load Model & Verify Feature Schema Parity at Startup (Section 8)
-    detector_instance.load()
-    is_valid, schema_msg = detector_instance.verify_feature_schema()
+
+    # 1. Load Model & Verify Feature Schema Parity at Startup
+    detector_service.load_model()
+    is_valid, schema_msg = detector_service.verify_feature_schema()
     if is_valid:
         print(f"[Main] Model & Preprocessor Schema Check: PASSED ({schema_msg})")
     else:
         print(f"[Main] WARNING / SCHEMA MISMATCH: {schema_msg}")
 
-    # Pre-warm SHAP explainer
-    explainer_instance._init_shap_explainer(detector_instance)
-    try:
-        # Run one dummy inference pass to warm JIT/C-extensions
-        dummy_feat = {name: 0.0 for name in explainer_instance.feature_names}
-        import numpy as np
-        dummy_scaled = np.zeros((1, len(explainer_instance.feature_names)))
-        explainer_instance.explain_instance(dummy_feat, detector_instance, dummy_scaled)
-        print("[Main] SHAP explainer pre-warmed successfully.")
-    except Exception as e:
-        print(f"[Main] SHAP explainer warmup notice: {e}")
+    # 2. Pre-warm SHAP explainer
+    shap_service.prewarm(detector_service.detector)
 
-    # 2. Launch background continuous simulation loop
+    # 3. Launch background continuous simulation loop
     asyncio.create_task(background_sensor_simulation_loop())
     print("[Main] Background telemetry simulation loop launched.")
     print("==================================================================")
@@ -90,25 +73,21 @@ async def background_sensor_simulation_loop():
     evaluating them against the Tier 1 anomaly model + SHAP explainer,
     monitoring communication integrity, and broadcasting via WebSocket.
     """
-    from backend.services.disaster_risk import disaster_risk_engine
-    from backend.services.weather_api import weather_api_service
-
     while True:
         try:
             readings = []
             total_infer_time_ms = 0.0
             infer_count = 0
-            now = datetime.datetime.now(datetime.timezone.utc)
 
             # 1. Generate station readings EXACTLY ONCE per loop cycle
             station_readings_map = {
-                s_id: simulator_instance.generate_reading(s_id)
-                for s_id in simulator_instance.stations
+                s_id: simulator_service.generate_reading(s_id)
+                for s_id in simulator_service.stations
             }
             valid_readings = {s_id: r for s_id, r in station_readings_map.items() if r is not None}
 
             # 2. Check for offline stations / communication timeouts
-            offline_events = comm_monitor.check_for_offline_stations(list(simulator_instance.stations.keys()))
+            offline_events = comm_monitor.check_for_offline_stations(list(simulator_service.stations.keys()))
             for off_evt in offline_events:
                 dummy_r = {
                     "station_id": off_evt["station_id"],
@@ -118,7 +97,7 @@ async def background_sensor_simulation_loop():
                     "humidity": 0.0,
                     "injected_fault_type": "STATION_OFFLINE"
                 }
-                anomalies.record_live_anomaly(dummy_r, off_evt, [], None)
+                incident_service.record_anomaly(dummy_r, off_evt, [], None)
 
             # 3. Evaluate ML Anomaly detection, Communication Integrity, SHAP, Imputation, Spatial Consensus
             for s_id, r in valid_readings.items():
@@ -143,18 +122,18 @@ async def background_sensor_simulation_loop():
                         "why_detected": comm_record["why_detected"],
                         "spatial_verdict": "BYPASSED (COMMUNICATION FAILURE)",
                         "isolation_forest_score": 0.0,
-                        "model_name": detector_instance.version,
-                        "model_version": detector_instance.version
+                        "model_name": detector_service.version,
+                        "model_version": detector_service.version
                     }
                     r["contributing_factors"] = []
                     r["imputed_suggestion"] = None
-                    anomalies.record_live_anomaly(r, r["anomaly_evaluation"], [], None)
+                    incident_service.record_anomaly(r, r["anomaly_evaluation"], [], None)
                     readings.append(r)
                     continue
 
                 # B. ML Model Prediction
                 t_start = time.perf_counter()
-                pred = detector_instance.predict_single(
+                pred = detector_service.predict_single(
                     temperature=t,
                     pressure=p,
                     humidity=rh,
@@ -187,13 +166,13 @@ async def background_sensor_simulation_loop():
                     prim_feat = factors[0]["feature"] if len(factors) > 0 else "temperature"
                     base_p = "temperature" if "temp" in prim_feat else ("pressure" if "press" in prim_feat else "humidity")
                     bad_v = t if base_p == "temperature" else (p if base_p == "pressure" else rh)
-                    r["imputed_suggestion"] = imputer.suggest_correction(base_p, bad_v, spatial_neighbors=neighbors)
-                    anomalies.record_live_anomaly(r, pred, factors, r.get("imputed_suggestion"))
+                    r["imputed_suggestion"] = imputer_service.suggest_correction(base_p, bad_v, spatial_neighbors=neighbors)
+                    incident_service.record_anomaly(r, pred, factors, r.get("imputed_suggestion"))
 
                 readings.append(r)
 
-                # Real-Time Prediction Logging in terminal if anomalous or sampled (Section 8)
-                if pred["is_anomaly"] or (s_id == "AWS-01" and simulator_instance.step_count % 10 == 0):
+                # Real-Time Prediction Logging in terminal if anomalous or sampled
+                if pred["is_anomaly"] or (s_id == "AWS-01" and simulator_service.step_count % 10 == 0):
                     print(f"[PredictionLog] {pred.get('prediction_log')}")
 
             avg_latency = round(total_infer_time_ms / max(1, infer_count), 3)
@@ -209,22 +188,22 @@ async def background_sensor_simulation_loop():
                     "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     "readings": readings,
                     "disaster_risks": latest_risk_summary,
-                    "is_running": simulator_instance.is_running,
-                    "speed_multiplier": simulator_instance.speed_multiplier,
+                    "is_running": simulator_service.is_running,
+                    "speed_multiplier": simulator_service.speed_multiplier,
                     "inference_latency_ms": avg_latency
                 })
         except Exception as e:
             print(f"[SimulationLoop] Notice: {e}")
 
-        # Sleep interval scales inversely with speed_multiplier (fast real-time cadence)
+        # Sleep interval scales inversely with speed_multiplier
         base_sleep = 0.9
-        active_sleep = max(0.15, base_sleep / max(0.2, simulator_instance.speed_multiplier))
+        active_sleep = max(0.15, base_sleep / max(0.2, simulator_service.speed_multiplier))
         await asyncio.sleep(active_sleep)
 
 
 @app.get("/api/health")
 async def health_check():
-    is_valid, msg = detector_instance.verify_feature_schema()
+    is_valid, msg = detector_service.verify_feature_schema()
     return {
         "status": "HEALTHY",
         "service": "SkyGuard AI Backend",
@@ -232,8 +211,8 @@ async def health_check():
         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "database_connected": db_manager.is_connected,
         "active_websocket_subscribers": len(manager.active_connections),
-        "simulation_running": simulator_instance.is_running,
-        "simulation_speed": simulator_instance.speed_multiplier,
+        "simulation_running": simulator_service.is_running,
+        "simulation_speed": simulator_service.speed_multiplier,
         "feature_schema_verified": is_valid,
         "schema_details": msg
     }

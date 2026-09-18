@@ -1,45 +1,8 @@
 """
 backend/routers/risks.py
-Tier 2 Extended Module router for SkyGuard AI — Disaster Risk Intelligence.
+Compatibility wrapper delegating to backend.api.routers.risks.
 """
 
-from fastapi import APIRouter
-from backend.services.disaster_risk import disaster_risk_engine
-from backend.services.weather_api import weather_api_service
-from simulator.aws_simulator import simulator_instance
+from backend.api.routers.risks import router, get_disaster_risks
 
-router = APIRouter(prefix="/risks", tags=["Disaster Risk Intelligence (Tier 2 Extended)"])
-
-
-@router.get("")
-async def get_disaster_risks(station_id: str = "AWS_GOA_01"):
-    """
-    Returns Tier 2 Disaster Risk Intelligence (Flood, Extreme Rain, Heatwave, Cyclone)
-    combining clean Tier 1 validated sensor readings + Weather API feeds.
-    Visually and architecturally demarcated as an Extended Module.
-    """
-    # 1. Fetch current sensor reading
-    reading = simulator_instance.generate_reading(station_id) or {
-        "temperature": 28.5, "pressure": 1012.0, "humidity": 78.0
-    }
-
-    # 2. Fetch Weather API atmospheric context
-    w_api = weather_api_service.fetch_current_weather()
-
-    # 3. Calculate risks
-    risk_summary = disaster_risk_engine.calculate_disaster_risks(reading, w_api)
-
-    return {
-        "station_id": station_id,
-        "location": "Goa Coastal Region, India",
-        "validated_sensor_input": {
-            "temperature": reading.get("temperature"),
-            "pressure": reading.get("pressure"),
-            "humidity": reading.get("humidity")
-        },
-        "weather_api_context": {
-            "rainfall_mm": w_api.get("rainfall_mm"),
-            "wind_speed_kmh": w_api.get("wind_speed_kmh")
-        },
-        "risk_intelligence": risk_summary
-    }
+__all__ = ["router", "get_disaster_risks"]
