@@ -1,10 +1,10 @@
 """
-backend/config.py
-Configuration settings for SkyGuard AI backend using Pydantic Settings.
+backend/config/settings.py
+Centralized configuration settings for SkyGuard AI backend using Pydantic Settings.
 """
 
-from pydantic_settings import BaseSettings
 from typing import Optional
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
