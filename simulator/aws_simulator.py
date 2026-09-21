@@ -253,6 +253,7 @@ class VirtualAWSSimulator:
         self.active_injections: Dict[str, Dict[str, Any]] = {}
         self.frozen_values: Dict[str, Dict[str, float]] = {}
         self.drift_accumulators: Dict[str, Dict[str, float]] = {}
+        self.stochastic_events: Dict[str, Dict[str, Any]] = {}
 
         self.latest_readings_cache: Dict[str, Dict[str, Any]] = {}
         self.baseline_stats = self._load_learned_stats()
@@ -284,6 +285,7 @@ class VirtualAWSSimulator:
         self.active_injections.clear()
         self.frozen_values.clear()
         self.drift_accumulators.clear()
+        self.stochastic_events.clear()
         self.step_count = 0
         self.latest_readings_cache.clear()
         return {
@@ -405,6 +407,38 @@ class VirtualAWSSimulator:
         is_simulated_fault = False
         injected_fault_tag = "NONE"
         reading_timestamp = now
+
+        # Natural stochastic atmospheric micro-events across network (periodic realistic variations)
+        if self.is_running and not injection and matched_id not in self.active_injections:
+            if matched_id in self.stochastic_events:
+                evt = self.stochastic_events[matched_id]
+                temp = round(temp + evt.get("temp_offset", 0.0), 2)
+                press = round(press + evt.get("press_offset", 0.0), 2)
+                humid = round(min(100.0, max(15.0, humid + evt.get("humid_offset", 0.0))), 2)
+                evt["steps_left"] -= 1
+                if evt["steps_left"] <= 0:
+                    self.stochastic_events.pop(matched_id, None)
+            elif random.random() < 0.018:
+                evt_type = random.choice([
+                    "transient_thermal_spike",
+                    "coastal_pressure_drop",
+                    "micro_humidity_surge",
+                    "sensor_drift_perturbation"
+                ])
+                if evt_type == "transient_thermal_spike":
+                    self.stochastic_events[matched_id] = {"temp_offset": round(random.uniform(7.0, 10.5), 2), "steps_left": random.randint(3, 6)}
+                elif evt_type == "coastal_pressure_drop":
+                    self.stochastic_events[matched_id] = {"press_offset": round(random.uniform(-16.0, -11.0), 2), "steps_left": random.randint(3, 5)}
+                elif evt_type == "micro_humidity_surge":
+                    self.stochastic_events[matched_id] = {"humid_offset": round(random.uniform(24.0, 34.0), 2), "steps_left": random.randint(3, 6)}
+                elif evt_type == "sensor_drift_perturbation":
+                    self.stochastic_events[matched_id] = {"temp_offset": round(random.uniform(6.0, 8.5), 2), "press_offset": round(random.uniform(-10.0, -6.5), 2), "steps_left": random.randint(3, 5)}
+
+                if matched_id in self.stochastic_events:
+                    evt = self.stochastic_events[matched_id]
+                    temp = round(temp + evt.get("temp_offset", 0.0), 2)
+                    press = round(press + evt.get("press_offset", 0.0), 2)
+                    humid = round(min(100.0, max(15.0, humid + evt.get("humid_offset", 0.0))), 2)
 
         if injection and injection["remaining_steps"] > 0:
             f_type = injection["type"]
