@@ -193,7 +193,7 @@ def record_live_anomaly(
             return entry
 
     anom_entry = {
-        "id": f"EVT_{st_id}_{root_cause}",
+        "id": f"ANOM_{st_id}_{root_cause}",
         "station_id": st_id,
         "stationId": st_id,
         "station_name": st_name,

@@ -38,11 +38,11 @@ export const AnomaliesPage: React.FC<AnomaliesPageProps> = ({ anomalies = [], ri
   }, [anomalies, filterSeverity]);
 
   const activeId = useMemo(() => {
-    if (selectedAnomalyId) {
+    if (selectedAnomalyId && (filteredAnomalies.some(a => a.id === selectedAnomalyId) || anomalies.some(a => a.id === selectedAnomalyId))) {
       return selectedAnomalyId;
     }
-    return filteredAnomalies[0]?.id || '';
-  }, [selectedAnomalyId, filteredAnomalies]);
+    return filteredAnomalies[0]?.id || anomalies[0]?.id || '';
+  }, [selectedAnomalyId, filteredAnomalies, anomalies]);
 
   // Attempt to resolve selected anomaly from filtered feed, full active feed, or historical archive
   const selectedAnomaly = useMemo(() => {

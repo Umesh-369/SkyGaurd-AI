@@ -208,8 +208,8 @@ class Tier1AnomalyDetector:
 
         # 3. Model Scoring against Calibrated Decision Threshold
         raw_score = float(self.model.decision_function(X_scaled)[0])
-        # Anomaly if raw score below calibrated threshold (or raw predict == -1)
-        model_flagged = bool(raw_score < self.threshold or self.model.predict(X_scaled)[0] == -1)
+        # Anomaly if raw score below calibrated threshold
+        model_flagged = bool(raw_score < self.threshold)
 
         # 4. Spike, Freeze, and Multi-Sensor Rule Evaluation
         dT = abs(feat_dict["dT"])
@@ -226,21 +226,20 @@ class Tier1AnomalyDetector:
             if (len(set(last_5_T)) == 1 or len(set(last_5_P)) == 1 or len(set(last_5_RH)) == 1):
                 is_frozen = True
 
-        # Multi-sensor consistency checks (Section 6)
+        # Multi-sensor rate-of-change and physical bounds consistency checks
         multi_sensor_status = {
-            "temperature": "Flagged" if (dT > 6.0 or "temperature" in out_of_bounds or abs(feat_dict["dev_from_baseline_T"]) > 8.0) else "Normal",
-            "pressure": "Flagged" if (dP > 10.0 or "pressure" in out_of_bounds or abs(feat_dict["dev_from_baseline_P"]) > 12.0) else "Normal",
-            "humidity": "Flagged" if (dRH > 25.0 or "humidity" in out_of_bounds or abs(feat_dict["dev_from_baseline_RH"]) > 28.0) else "Normal",
+            "temperature": "Flagged" if (dT > 6.0 or "temperature" in out_of_bounds) else "Normal",
+            "pressure": "Flagged" if (dP > 10.0 or "pressure" in out_of_bounds) else "Normal",
+            "humidity": "Flagged" if (dRH > 25.0 or "humidity" in out_of_bounds) else "Normal",
         }
         flagged_sensor_count = sum(1 for v in multi_sensor_status.values() if v == "Flagged")
 
-        # Whole station flatline / power failure check (Section 6 edge case)
+        # Whole station flatline / power failure check
         is_station_wide_failure = flagged_sensor_count >= 2 or (
             len(active_history) >= 4 and len(set(last_5_T)) == 1 and len(set(last_5_P)) == 1 and len(set(last_5_RH)) == 1
         )
 
         # Calibrate raw IsolationForest decision score into confidence (0.0 to 1.0)
-        # raw_score ranges typically from -0.35 (very anomalous) to +0.30 (very normal)
         confidence = float(np.clip(1.0 - (raw_score - self.threshold) / 0.45, 0.50, 0.99))
 
         is_anomaly = model_flagged or len(out_of_bounds) > 0 or is_spike or is_frozen or (flagged_sensor_count > 0)
@@ -321,7 +320,7 @@ class Tier1AnomalyDetector:
         if not self.explainer:
             self.explainer = AnomalyExplainer(self)
         
-        shap_factors = self.explainer.explain_instance(feat_dict, self, X_scaled)
+        shap_factors = self.explainer.explain_instance(feat_dict, self, X_scaled, force_exact_shap=is_anomaly)
 
         expected_dict = {
             "temperature": round(DEFAULT_CLIMATE_BASELINES["temperature"]["mean"] + DEFAULT_CLIMATE_BASELINES["temperature"]["diurnal_amp"] * feat_dict["hour_sin"], 2),

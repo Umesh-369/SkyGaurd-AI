@@ -410,21 +410,11 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
               }
             });
 
-            // Only update anomalies state reference if anomalies list or readings actually changed
-            const currentAnomalies = get().anomalies;
-            const hasAnomChanged = mergedAnomalies.length !== currentAnomalies.length ||
-              mergedAnomalies.some((m, idx) => {
-                const c = currentAnomalies[idx];
-                return !c || c.id !== m.id || c.readings.temperature !== m.readings.temperature || c.readings.pressure !== m.readings.pressure || c.readings.humidity !== m.readings.humidity;
-              });
-
-            const finalAnomalies = hasAnomChanged ? mergedAnomalies : currentAnomalies;
-
             set({
               liveReadings: readings,
               readingHistory: updatedHistory,
               stations: updatedStations,
-              anomalies: finalAnomalies,
+              anomalies: mergedAnomalies,
               historicalAnomalies: mergedHist,
               disasterRisks: payload.disaster_risks ?? get().disasterRisks,
               isSimulating: isSim,
@@ -933,15 +923,10 @@ export function addOrUpdateAnomalyRecord(
   }
 
   const existingIdx = anomalies.findIndex(a => {
+    if (a.id === incoming.id) return true;
     const sameStation = a.station_id === incoming.station_id || a.stationId === incoming.stationId;
-    const sameRootCause = a.root_cause === incoming.root_cause || a.rootCause === incoming.rootCause;
-
-    const timeA = new Date(a.timestamp).getTime();
-    const timeInc = new Date(incoming.timestamp).getTime();
-    const timeDiffMs = Math.abs(timeInc - timeA);
-    const within30s = !isNaN(timeDiffMs) && timeDiffMs < 30000;
-
-    return sameStation && (sameRootCause || within30s);
+    const sameRootCause = (a.root_cause || a.rootCause) === (incoming.root_cause || incoming.rootCause);
+    return sameStation && sameRootCause;
   });
 
   if (existingIdx !== -1) {
