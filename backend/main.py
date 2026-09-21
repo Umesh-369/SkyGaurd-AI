@@ -201,6 +201,18 @@ async def background_sensor_simulation_loop():
         await asyncio.sleep(active_sleep)
 
 
+@app.get("/")
+async def root():
+    return {
+        "message": "Welcome to SkyGuard AI API Server",
+        "service": settings.PROJECT_NAME,
+        "version": "2.0.0",
+        "docs": "/docs",
+        "health": "/api/health",
+        "websocket": "/ws/readings"
+    }
+
+
 @app.get("/api/health")
 async def health_check():
     is_valid, msg = detector_service.verify_feature_schema()

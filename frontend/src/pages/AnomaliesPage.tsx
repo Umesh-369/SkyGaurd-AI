@@ -3,6 +3,7 @@ import { AnomaliesFeed } from '../components/AnomaliesFeed';
 import { AnomaliesView } from '../components/AnomaliesView';
 import { AnomalyRecord, DisasterRiskSummary } from '../types';
 import { useSkyGuardStore } from '../store/useSkyGuardStore';
+import { getApiUrl } from '../config/api';
 
 interface AnomaliesPageProps {
   anomalies: AnomalyRecord[];
@@ -73,7 +74,7 @@ export const AnomaliesPage: React.FC<AnomaliesPageProps> = ({ anomalies = [], ri
   // If activeId is not in memory, query backend API endpoint /api/anomalies/{anomaly_id}
   React.useEffect(() => {
     if (activeId && !filteredAnomalies.some(a => a.id === activeId) && !storeHistorical.some(a => a.id === activeId)) {
-      fetch(`/api/anomalies/${activeId}`)
+      fetch(getApiUrl(`/api/anomalies/${activeId}`))
         .then(res => res.ok ? res.json() : null)
         .then(data => {
           if (data && data.anomaly) {

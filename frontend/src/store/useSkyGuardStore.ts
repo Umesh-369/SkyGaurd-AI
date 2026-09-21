@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { Station, Reading, AnomalyRecord, DisasterRiskSummary } from '../types';
+import { getApiUrl, getWsUrl } from '../config/api';
 
 export interface OfflineEvalMetrics {
   tier1_anomaly_model?: {
@@ -233,7 +234,7 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
 
   fetchInitialData: async () => {
     try {
-      const resSt = await fetch('/api/stations');
+      const resSt = await fetch(getApiUrl('/api/stations'));
       if (resSt.ok) {
         const data = await resSt.json();
         if (data.stations && data.stations.length > 0) {
@@ -241,7 +242,7 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
         }
       }
 
-      const resAnom = await fetch('/api/anomalies');
+      const resAnom = await fetch(getApiUrl('/api/anomalies'));
       if (resAnom.ok) {
         const data = await resAnom.json();
         if (data.anomalies && Array.isArray(data.anomalies) && data.anomalies.length > 0) {
@@ -255,20 +256,20 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
         }
       }
 
-      const resRisk = await fetch('/api/risks');
+      const resRisk = await fetch(getApiUrl('/api/risks'));
       if (resRisk.ok) {
         const data = await resRisk.json();
         if (data.risk_intelligence) set({ disasterRisks: data.risk_intelligence });
       }
 
-      const resSim = await fetch('/api/simulator/status');
+      const resSim = await fetch(getApiUrl('/api/simulator/status'));
       if (resSim.ok) {
         const data = await resSim.json();
         if (data.is_running !== undefined) set({ isSimulating: data.is_running });
         if (data.speed_multiplier !== undefined) set({ simSpeed: data.speed_multiplier });
       }
 
-      const resMetrics = await fetch('/api/analytics/metrics');
+      const resMetrics = await fetch(getApiUrl('/api/analytics/metrics'));
       if (resMetrics.ok) {
         const data = await resMetrics.json();
         set({ offlineEvalMetrics: data });
@@ -284,9 +285,7 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
     }
 
     try {
-      const isSecure = window.location.protocol === 'https:';
-      const wsProtocol = isSecure ? 'wss:' : 'ws:';
-      const wsUrl = `${wsProtocol}//${window.location.host}/ws/readings`;
+      const wsUrl = getWsUrl('/ws/readings');
       wsSocket = new WebSocket(wsUrl);
 
       wsSocket.onopen = () => {
@@ -448,7 +447,7 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
 
   startSimulation: async () => {
     try {
-      await fetch('/api/simulator/start', { method: 'POST' });
+      await fetch(getApiUrl('/api/simulator/start'), { method: 'POST' });
       set({ isSimulating: true });
       get().fetchInitialData();
     } catch (e) {
@@ -458,7 +457,7 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
 
   stopSimulation: async () => {
     try {
-      await fetch('/api/simulator/stop', { method: 'POST' });
+      await fetch(getApiUrl('/api/simulator/stop'), { method: 'POST' });
       set({ isSimulating: false });
       get().fetchInitialData();
     } catch (e) {
@@ -468,7 +467,7 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
 
   resetSimulation: async () => {
     try {
-      await fetch('/api/simulator/reset', { method: 'POST' });
+      await fetch(getApiUrl('/api/simulator/reset'), { method: 'POST' });
       set({ liveReadings: [], readingHistory: [], anomalies: [] });
       get().fetchInitialData();
     } catch (e) {
@@ -478,7 +477,7 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
 
   setSimSpeed: async (speed: number) => {
     try {
-      await fetch('/api/simulator/speed', {
+      await fetch(getApiUrl('/api/simulator/speed'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ speed })
@@ -491,7 +490,7 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
 
   injectFault: async (stationId: string, faultType: string, param: string, mag: number) => {
     try {
-      const res = await fetch('/api/simulator/inject', {
+      const res = await fetch(getApiUrl('/api/simulator/inject'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -550,7 +549,7 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
 
   clearFaults: async (stationId?: string) => {
     try {
-      const res = await fetch('/api/simulator/clear', {
+      const res = await fetch(getApiUrl('/api/simulator/clear'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ station_id: stationId, stationId: stationId })

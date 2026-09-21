@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ShieldAlert, CheckCircle2, Clock, UserCheck, AlertTriangle, Sparkles, Check, ArrowRight } from 'lucide-react';
 import { AnomalyRecord, DisasterRiskSummary, RecommendedAction } from '../types';
 import { useSkyGuardStore } from '../store/useSkyGuardStore';
+import { getApiUrl } from '../config/api';
 
 interface RecommendedActionsPanelProps {
   anomaly: AnomalyRecord;
@@ -28,7 +29,7 @@ export const RecommendedActionsPanel: React.FC<RecommendedActionsPanelProps> = (
     let isMounted = true;
     setLoading(true);
 
-    fetch(`/api/anomalies/${anomalyId}/recommendations`)
+    fetch(getApiUrl(`/api/anomalies/${anomalyId}/recommendations`))
       .then((res) => {
         if (!res.ok) throw new Error('Failed to fetch recommendations');
         return res.json();
@@ -117,7 +118,7 @@ export const RecommendedActionsPanel: React.FC<RecommendedActionsPanelProps> = (
     setResolvingId(id);
     try {
       // Reuse existing active alert clear / dismiss mechanism
-      await fetch(`/api/alerts/${id}/dismiss`, { method: 'POST' }).catch(() => null);
+      await fetch(getApiUrl(`/api/alerts/${id}/dismiss`), { method: 'POST' }).catch(() => null);
       await clearFaults(stationId);
       setAcknowledgedIds((prev) => {
         const next = new Set(prev);

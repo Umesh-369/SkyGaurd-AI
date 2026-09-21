@@ -28,6 +28,7 @@ import {
 } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSkyGuardStore } from '../store/useSkyGuardStore';
+import { getApiUrl } from '../config/api';
 
 export const AnalyticsPage: React.FC = () => {
   const { 
@@ -53,7 +54,7 @@ export const AnalyticsPage: React.FC = () => {
   } | null>(null);
 
   React.useEffect(() => {
-    fetch('/api/analytics/edge-model')
+    fetch(getApiUrl('/api/analytics/edge-model'))
       .then(res => res.ok ? res.json() : null)
       .then(data => { if (data) setEdgeModelMeta(data); })
       .catch(() => {/* silently fall through — liveInferenceLatency covers latency */});
