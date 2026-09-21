@@ -41,7 +41,7 @@ class Tier1AnomalyDetector:
     telemetry (Temperature, Atmospheric Pressure, Relative Humidity) with temporal context.
     """
 
-    def __init__(self, contamination: float = 0.045, threshold: float = -0.05):
+    def __init__(self, contamination: float = 0.045, threshold: float = -0.08):
         self.contamination = contamination
         self.threshold = threshold  # Calibrated decision function threshold
         self.model = IsolationForest(
