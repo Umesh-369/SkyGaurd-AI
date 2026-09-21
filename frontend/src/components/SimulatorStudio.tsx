@@ -281,7 +281,11 @@ export const SimulatorStudio: React.FC = () => {
           const temp = liveR?.temperature ?? st.last_reading?.temperature;
           const press = liveR?.pressure ?? st.last_reading?.pressure;
           const humid = liveR?.humidity ?? st.last_reading?.humidity;
-          const isAnom = liveR?.anomaly_evaluation?.is_anomaly;
+          const isAnom = Boolean(
+            liveR?.anomaly_evaluation?.is_anomaly ||
+            (liveR?.injected_fault_type && liveR.injected_fault_type !== 'NONE') ||
+            anomalies.some(a => (a.station_id === st.station_id || a.station_id === st.id) && a.is_anomaly)
+          );
           const isGoa = st.station_id.startsWith('AWS-0') || st.station_id.includes('GA');
 
           return (

@@ -105,10 +105,34 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   // Active Anomaly Evaluation for Selected Station
   const currentEval = currentLiveReading?.anomaly_evaluation;
-  const isLiveAnom = Boolean(currentEval?.is_anomaly || (currentLiveReading?.injected_fault_type && currentLiveReading.injected_fault_type !== 'NONE'));
-  const selectedStationAnom = isLiveAnom
-    ? (anomalies.find(a => (a.station_id === selectedStation.station_id || a.station_id === selectedStation.id) && a.is_anomaly) || null)
-    : null;
+  const existingStationAnom = anomalies.find(a => (a.station_id === selectedStation.station_id || a.station_id === selectedStation.id) && a.is_anomaly);
+  const isLiveAnom = Boolean(currentEval?.is_anomaly || (currentLiveReading?.injected_fault_type && currentLiveReading.injected_fault_type !== 'NONE') || existingStationAnom);
+  const selectedStationAnom: AnomalyRecord | null = existingStationAnom || (isLiveAnom ? {
+    id: `ANOM_${selectedStation.station_id}_live`,
+    station_id: selectedStation.station_id,
+    stationId: selectedStation.station_id,
+    station_name: selectedStation.name,
+    stationName: selectedStation.name,
+    timestamp: currentLiveReading?.timestamp || new Date().toISOString(),
+    origin: 'SIMULATED',
+    status: currentEval?.status || 'Anomaly',
+    category: (currentEval?.category && currentEval.category !== 'NOMINAL' ? currentEval.category : 'SENSOR_FAULT') as 'SENSOR_FAULT' | 'GENUINE_WEATHER_EVENT' | 'COMMUNICATION_FAILURE',
+    type: currentEval?.type || 'Multi-sensor',
+    readings: { temperature: currentTemp, pressure: currentPress, humidity: currentHum },
+    is_anomaly: true,
+    isAnomaly: true,
+    severity: currentEval?.severity || 'HIGH',
+    root_cause: currentLiveReading?.injected_fault_type || currentEval?.root_cause || 'sensor_anomaly',
+    rootCause: currentLiveReading?.injected_fault_type || currentEval?.root_cause || 'sensor_anomaly',
+    confidence: currentEval?.confidence ?? 0.95,
+    is_deterministic: false,
+    isolation_forest_score: currentEval?.isolation_forest_score ?? -0.25,
+    spatial_verdict: currentEval?.spatial_verdict || 'CONTRADICTED_BY_NEIGHBORS (ISOLATED SENSOR FAULT)',
+    interpretation: currentEval?.interpretation || 'Likely Sensor Fault',
+    why_detected: currentEval?.why_detected || 'Live anomaly detected on active telemetry stream.',
+    contributing_factors: currentLiveReading?.contributing_factors || [],
+    imputed_value_suggestion: currentLiveReading?.imputed_suggestion
+  } : null);
   const isAnomActive = isLiveAnom;
 
   const rawScore = currentEval

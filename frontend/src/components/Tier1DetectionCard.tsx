@@ -49,11 +49,12 @@ export const Tier1DetectionCard: React.FC<Tier1DetectionCardProps> = ({
     r => r.station_id === stationId || r.station_id === selectedStation?.id
   );
 
-  const isLiveAnom = Boolean(currentReading?.anomaly_evaluation?.is_anomaly || (currentReading?.injected_fault_type && currentReading.injected_fault_type !== 'NONE'));
+  const existingStationAnom = anomalies.find(a => (a.station_id === stationId || a.station_id === selectedStation?.id) && a.is_anomaly);
+  const isLiveAnom = Boolean(currentReading?.anomaly_evaluation?.is_anomaly || (currentReading?.injected_fault_type && currentReading.injected_fault_type !== 'NONE') || existingStationAnom);
 
-  const activeAnomaly = propAnomaly !== undefined
+  const activeAnomaly: AnomalyRecord | undefined = propAnomaly !== undefined
     ? propAnomaly
-    : (isLiveAnom ? anomalies.find(a => (a.station_id === stationId || a.station_id === selectedStation?.id) && a.is_anomaly) : undefined);
+    : existingStationAnom;
 
   const temp = currentReading?.temperature ?? selectedStation?.last_reading?.temperature ?? 28.5;
   const press = currentReading?.pressure ?? selectedStation?.last_reading?.pressure ?? 1012.0;

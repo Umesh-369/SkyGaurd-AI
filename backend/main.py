@@ -76,6 +76,7 @@ async def background_sensor_simulation_loop():
     while True:
         try:
             readings = []
+            detected_anomaly_records = []
             total_infer_time_ms = 0.0
             infer_count = 0
 
@@ -97,7 +98,8 @@ async def background_sensor_simulation_loop():
                     "humidity": 0.0,
                     "injected_fault_type": "STATION_OFFLINE"
                 }
-                incident_service.record_anomaly(dummy_r, off_evt, [], None)
+                anom_record = incident_service.record_anomaly(dummy_r, off_evt, [], None)
+                detected_anomaly_records.append(anom_record)
 
             # 3. Evaluate ML Anomaly detection, Communication Integrity, SHAP, Imputation, Spatial Consensus
             for s_id, r in valid_readings.items():
@@ -127,7 +129,8 @@ async def background_sensor_simulation_loop():
                     }
                     r["contributing_factors"] = []
                     r["imputed_suggestion"] = None
-                    incident_service.record_anomaly(r, r["anomaly_evaluation"], [], None)
+                    anom_record = incident_service.record_anomaly(r, r["anomaly_evaluation"], [], None)
+                    detected_anomaly_records.append(anom_record)
                     readings.append(r)
                     continue
 
@@ -167,7 +170,8 @@ async def background_sensor_simulation_loop():
                     base_p = "temperature" if "temp" in prim_feat else ("pressure" if "press" in prim_feat else "humidity")
                     bad_v = t if base_p == "temperature" else (p if base_p == "pressure" else rh)
                     r["imputed_suggestion"] = imputer_service.suggest_correction(base_p, bad_v, spatial_neighbors=neighbors)
-                    incident_service.record_anomaly(r, pred, factors, r.get("imputed_suggestion"))
+                    anom_record = incident_service.record_anomaly(r, pred, factors, r.get("imputed_suggestion"))
+                    detected_anomaly_records.append(anom_record)
 
                 readings.append(r)
 
@@ -182,6 +186,20 @@ async def background_sensor_simulation_loop():
             w_api = weather_api_service.fetch_current_weather()
             latest_risk_summary = disaster_risk_engine.calculate_disaster_risks(sample_r, w_api)
 
+            # 5. Broadcast ANOMALY_DETECTED for each anomaly found during this simulation cycle
+            #    This ensures the Anomaly Page updates immediately when the ML model or
+            #    communication monitor flags an anomaly from the live simulation stream.
+            if len(detected_anomaly_records) > 0 and len(manager.active_connections) > 0:
+                for anom_record in detected_anomaly_records:
+                    await manager.broadcast({
+                        "event": "ANOMALY_DETECTED",
+                        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                        "anomaly": anom_record,
+                        "readings": readings,
+                        "disaster_risks": latest_risk_summary
+                    })
+
+            # 6. Broadcast full SENSOR_STREAM_UPDATE with all station readings
             if len(readings) > 0 and len(manager.active_connections) > 0:
                 await manager.broadcast({
                     "event": "SENSOR_STREAM_UPDATE",

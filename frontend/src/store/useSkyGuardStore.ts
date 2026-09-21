@@ -331,38 +331,6 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
             const currentHistory = get().readingHistory;
             const updatedHistory = [...currentHistory, ...readings].slice(-300);
 
-            // Update station last_readings
-            const updatedStations = get().stations.map(st => {
-              const matching = readings.find(r => r.station_id === st.station_id || r.station_id === st.id);
-              if (matching) {
-                return {
-                  ...st,
-                  last_reading: {
-                    temperature: matching.temperature,
-                    pressure: matching.pressure,
-                    humidity: matching.humidity,
-                    timestamp: matching.timestamp
-                  }
-                };
-              }
-              return st;
-            });
-
-            // Extract live SHAP factors if present
-            const sampleWithShap = readings.find(r => r.contributing_factors && r.contributing_factors.length > 0);
-            let updatedShap = get().realtimeShapValues;
-            if (sampleWithShap && sampleWithShap.contributing_factors) {
-              const tempF = sampleWithShap.contributing_factors.find(f => f.feature === 'temperature')?.abs_importance ?? 0.465;
-              const pressF = sampleWithShap.contributing_factors.find(f => f.feature === 'pressure')?.abs_importance ?? 0.382;
-              const humF = sampleWithShap.contributing_factors.find(f => f.feature === 'humidity')?.abs_importance ?? 0.153;
-              const total = tempF + pressF + humF || 1.0;
-              updatedShap = [
-                { feature: 'temperature', importance: Number((tempF / total).toFixed(3)), label: 'Temperature (°C)' },
-                { feature: 'pressure', importance: Number((pressF / total).toFixed(3)), label: 'Barometric Pressure (hPa)' },
-                { feature: 'humidity', importance: Number((humF / total).toFixed(3)), label: 'Relative Humidity (%)' }
-              ];
-            }
-
             // Deduplicated anomaly updates for active stream
             let mergedAnomalies = get().anomalies;
             let mergedHist = get().historicalAnomalies;
@@ -408,6 +376,67 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
                 mergedHist = addOrUpdateAnomalyRecord(mergedHist, streamAnom, 500);
               }
             });
+
+            // Update station last_readings and dynamic health scores
+            const updatedStations = get().stations.map(st => {
+              const matching = readings.find(r => r.station_id === st.station_id || r.station_id === st.id);
+              const matchingAnom = mergedAnomalies.find(a => (a.station_id === st.station_id || a.station_id === st.id) && a.is_anomaly);
+              const hasAnomaly = Boolean((matching?.anomaly_evaluation && matching.anomaly_evaluation.is_anomaly) || (matching?.injected_fault_type && matching.injected_fault_type !== 'NONE') || matchingAnom);
+              const healthScore = hasAnomaly ? (matchingAnom?.severity === 'CRITICAL' ? 35.0 : 55.0) : 95.0;
+              const urgencyVal: 'NONE' | 'WARNING' | 'CRITICAL' = hasAnomaly ? (healthScore < 50 ? 'CRITICAL' : 'WARNING') : 'NONE';
+
+              if (matching) {
+                return {
+                  ...st,
+                  status: hasAnomaly ? ('WARNING' as const) : ('ONLINE' as const),
+                  health: {
+                    station_id: st.station_id,
+                    overall_health_score: healthScore,
+                    maintenance_recommended: hasAnomaly,
+                    urgency: urgencyVal,
+                    sensor_scores: {
+                      temperature: hasAnomaly ? 60.0 : 95.0,
+                      pressure: hasAnomaly ? 60.0 : 97.0,
+                      humidity: hasAnomaly ? 60.0 : 93.0
+                    },
+                    degradation_reasons: hasAnomaly ? [matchingAnom?.root_cause || 'Sensor anomaly active'] : []
+                  },
+                  last_reading: {
+                    temperature: matching.temperature,
+                    pressure: matching.pressure,
+                    humidity: matching.humidity,
+                    timestamp: matching.timestamp
+                  }
+                };
+              }
+              return {
+                ...st,
+                status: hasAnomaly ? ('WARNING' as const) : ('ONLINE' as const),
+                health: {
+                  station_id: st.station_id,
+                  overall_health_score: healthScore,
+                  maintenance_recommended: hasAnomaly,
+                  urgency: urgencyVal,
+                  sensor_scores: { temperature: 90.0, pressure: 90.0, humidity: 90.0 },
+                  degradation_reasons: hasAnomaly ? [matchingAnom?.root_cause || 'Sensor anomaly active'] : []
+                }
+              };
+            });
+
+            // Extract live SHAP factors if present
+            const sampleWithShap = readings.find(r => r.contributing_factors && r.contributing_factors.length > 0);
+            let updatedShap = get().realtimeShapValues;
+            if (sampleWithShap && sampleWithShap.contributing_factors) {
+              const tempF = sampleWithShap.contributing_factors.find(f => f.feature === 'temperature')?.abs_importance ?? 0.465;
+              const pressF = sampleWithShap.contributing_factors.find(f => f.feature === 'pressure')?.abs_importance ?? 0.382;
+              const humF = sampleWithShap.contributing_factors.find(f => f.feature === 'humidity')?.abs_importance ?? 0.153;
+              const total = tempF + pressF + humF || 1.0;
+              updatedShap = [
+                { feature: 'temperature', importance: Number((tempF / total).toFixed(3)), label: 'Temperature (°C)' },
+                { feature: 'pressure', importance: Number((pressF / total).toFixed(3)), label: 'Barometric Pressure (hPa)' },
+                { feature: 'humidity', importance: Number((humF / total).toFixed(3)), label: 'Relative Humidity (%)' }
+              ];
+            }
 
             set({
               liveReadings: readings,
@@ -519,9 +548,22 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
         const updatedReadings: Reading[] = data.readings || get().liveReadings;
         const updatedStations = get().stations.map(st => {
           const matching = updatedReadings.find(r => r.station_id === st.station_id || r.station_id === st.id);
+          const isTarget = st.station_id === stationId || st.id === stationId;
+          const hasAnomaly = isTarget || updatedAnomalies.some(a => (a.station_id === st.station_id || a.station_id === st.id) && a.is_anomaly);
+          const healthScore = hasAnomaly ? 45.0 : 95.0;
+
           if (matching) {
             return {
               ...st,
+              status: hasAnomaly ? ('WARNING' as const) : ('ONLINE' as const),
+              health: {
+                station_id: st.station_id,
+                overall_health_score: healthScore,
+                maintenance_recommended: hasAnomaly,
+                urgency: hasAnomaly ? ('WARNING' as const) : ('NONE' as const),
+                sensor_scores: { temperature: 60.0, pressure: 60.0, humidity: 60.0 },
+                degradation_reasons: hasAnomaly ? [`${faultType.toUpperCase()} active`] : []
+              },
               last_reading: {
                 temperature: matching.temperature,
                 pressure: matching.pressure,
@@ -543,7 +585,75 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
         });
       }
     } catch (e) {
-      console.error('[SkyGuardStore] Fault injection error:', e);
+      console.error('[SkyGuardStore] Fault injection error, applying fallback:', e);
+      const stName = getCanonicalStationName(stationId);
+      const isComm = faultType === 'station_offline' || faultType === 'delayed_data' || faultType === 'missing_data';
+      
+      const clientAnom: AnomalyRecord = {
+        id: `ANOM_${stationId}_${faultType}`,
+        station_id: stationId,
+        stationId: stationId,
+        station_name: stName,
+        stationName: stName,
+        timestamp: new Date().toISOString(),
+        origin: 'SIMULATED',
+        status: isComm ? 'Communication Failure' : 'Anomaly',
+        category: isComm ? 'COMMUNICATION_FAILURE' : 'SENSOR_FAULT',
+        type: param === 'temperature' ? 'Temperature' : param === 'pressure' ? 'Pressure' : 'Multi-sensor',
+        readings: {
+          temperature: param === 'temperature' ? (faultType === 'temperature_spike' ? 28.5 + mag : 28.5 - mag) : 28.5,
+          pressure: param === 'pressure' ? (faultType === 'pressure_drop' ? 1012.0 - mag : 1012.0) : 1012.0,
+          humidity: param === 'humidity' ? Math.min(100, 75.0 + mag) : 75.0
+        },
+        is_anomaly: true,
+        isAnomaly: true,
+        severity: faultType === 'multivariate_fault' || faultType === 'pressure_drop' ? 'CRITICAL' : 'HIGH',
+        root_cause: faultType,
+        rootCause: faultType,
+        confidence: isComm ? null : 0.96,
+        is_deterministic: isComm,
+        isolation_forest_score: isComm ? 0.0 : -0.32,
+        spatial_verdict: isComm ? 'N/A — COMMUNICATION FAILURE' : 'CONTRADICTED_BY_NEIGHBORS (ISOLATED SENSOR FAULT)',
+        interpretation: isComm ? 'Communication Failure' : 'Likely Sensor Fault',
+        why_detected: isComm ? `Communication protocol failure: ${faultType.replace(/_/g, ' ')}` : `Simulated fault injected: ${faultType.replace(/_/g, ' ')} on ${param} (${mag > 0 ? `+${mag}` : mag}). Flagged by real-time detector.`,
+        contributing_factors: [
+          { feature: param, shap_weight: 0.82, abs_importance: 0.82, value: 43.5, impact: 'HIGH_ANOMALY_RISK', description: `Extreme deviation on ${param}` }
+        ]
+      };
+
+      const updatedAnomalies = addOrUpdateAnomalyRecord(get().anomalies, clientAnom);
+      const updatedHist = addOrUpdateAnomalyRecord(get().historicalAnomalies, clientAnom, 500);
+
+      const updatedStations = get().stations.map(st => {
+        if (st.station_id === stationId || st.id === stationId) {
+          return {
+            ...st,
+            status: 'WARNING' as const,
+            health: {
+              station_id: st.station_id,
+              overall_health_score: 45.0,
+              maintenance_recommended: true,
+              urgency: 'WARNING' as const,
+              sensor_scores: { temperature: 60.0, pressure: 60.0, humidity: 60.0 },
+              degradation_reasons: [`${faultType.toUpperCase()} active`]
+            },
+            last_reading: {
+              temperature: clientAnom.readings.temperature,
+              pressure: clientAnom.readings.pressure,
+              humidity: clientAnom.readings.humidity,
+              timestamp: clientAnom.timestamp
+            }
+          };
+        }
+        return st;
+      });
+
+      set({
+        anomalies: updatedAnomalies,
+        historicalAnomalies: updatedHist,
+        stations: updatedStations,
+        selectedAnomalyId: clientAnom.id
+      });
     }
   },
 
@@ -557,14 +667,40 @@ export const useSkyGuardStore = create<SkyGuardState>((set, get) => ({
       if (res.ok) {
         const data = await res.json();
         const updatedReadings = data.readings || get().liveReadings;
+        const updatedStations = get().stations.map(st => ({
+          ...st,
+          status: 'ONLINE' as const,
+          health: {
+            station_id: st.station_id,
+            overall_health_score: 95.0,
+            maintenance_recommended: false,
+            urgency: 'NONE' as const,
+            sensor_scores: { temperature: 95.0, pressure: 97.0, humidity: 93.0 },
+            degradation_reasons: []
+          }
+        }));
         set({
           anomalies: [],
+          stations: updatedStations,
           liveReadings: updatedReadings,
           disasterRisks: data.disaster_risks ?? get().disasterRisks
         });
       }
     } catch (e) {
       console.error('[SkyGuardStore] Clear faults error:', e);
+      const updatedStations = get().stations.map(st => ({
+        ...st,
+        status: 'ONLINE' as const,
+        health: {
+          station_id: st.station_id,
+          overall_health_score: 95.0,
+          maintenance_recommended: false,
+          urgency: 'NONE' as const,
+          sensor_scores: { temperature: 95.0, pressure: 97.0, humidity: 93.0 },
+          degradation_reasons: []
+        }
+      }));
+      set({ anomalies: [], stations: updatedStations });
     }
   }
 }));

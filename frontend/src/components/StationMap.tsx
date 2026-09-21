@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Network, MapPin, Activity, Cpu, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Station } from '../types';
+import { useSkyGuardStore } from '../store/useSkyGuardStore';
 
 interface StationMapProps {
   stations: Station[];
@@ -44,11 +45,11 @@ const NEURAL_NODE_POSITIONS: Record<string, NodePos> = {
   'AWS-IND-BLR':   { x: 270, y: 465, layer: 'PROCESSING LAYER', subType: 'Plateau AWS' },
 
   // Output / Aggregation Layer: Metropolitan & Regional Gateways (X = 440)
-  'AWS-IND-DEL':   { x: 440, y: 35,  layer: 'AGGREGATION LAYER', subType: 'National Capital AWS' },
-  'AWS-IND-JAI':   { x: 440, y: 115, layer: 'AGGREGATION LAYER', subType: 'Desert Fringe' },
-  'AWS-IND-LKO':   { x: 440, y: 205, layer: 'AGGREGATION LAYER', subType: 'Gangetic AWS' },
-  'AWS-IND-CCU':   { x: 440, y: 310, layer: 'AGGREGATION LAYER', subType: 'Delta AWS' },
-  'AWS-IND-MAA':   { x: 440, y: 425, layer: 'AGGREGATION LAYER', subType: 'Coastal AWS' }
+  'AWS-IND-DEL':   { x: 440, y: 75,  layer: 'AGGREGATION LAYER', subType: 'National Capital AWS' },
+  'AWS-IND-JAI':   { x: 440, y: 175, layer: 'AGGREGATION LAYER', subType: 'Desert Fringe' },
+  'AWS-IND-LKO':   { x: 440, y: 275, layer: 'AGGREGATION LAYER', subType: 'Gangetic AWS' },
+  'AWS-IND-CCU':   { x: 440, y: 375, layer: 'AGGREGATION LAYER', subType: 'Delta AWS' },
+  'AWS-IND-MAA':   { x: 440, y: 465, layer: 'AGGREGATION LAYER', subType: 'Coastal AWS' }
 };
 
 const SYNAPTIC_CONNECTIONS: [string, string][] = [
@@ -85,6 +86,7 @@ export const StationMap: React.FC<StationMapProps> = ({
   selectedStationId,
   onSelectStation
 }) => {
+  const { anomalies } = useSkyGuardStore();
   const [hoveredStationId, setHoveredStationId] = useState<string | null>(null);
 
   const hoveredStation = stations.find(s => s.station_id === hoveredStationId || s.id === hoveredStationId);
@@ -191,9 +193,10 @@ export const StationMap: React.FC<StationMapProps> = ({
             const isSelected = stId === selectedStationId;
             const isHovered = stId === hoveredStationId;
 
-            const health = st.health?.overall_health_score ?? 100;
-            const hasFault = health < 60;
-            const hasWarning = health >= 60 && health < 85;
+            const stAnom = anomalies.find(a => (a.station_id === stId || a.station_id === st.id) && a.is_anomaly);
+            const health = st.health?.overall_health_score ?? (stAnom ? 45 : 100);
+            const hasFault = health < 60 || Boolean(stAnom);
+            const hasWarning = !hasFault && health < 85;
 
             const posX = (pos.x / 520) * 100;
             const posY = (pos.y / 520) * 100;
@@ -303,16 +306,23 @@ export const StationMap: React.FC<StationMapProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center justify-between text-[10px] font-mono pt-1 text-slate-500">
-                <span>SYNAPTIC STATUS:</span>
-                <span className={`font-bold px-2 py-0.5 rounded-full ${
-                  (hoveredStation.health?.overall_health_score ?? 100) < 60
-                    ? 'bg-red-100 text-red-700'
-                    : 'bg-emerald-100 text-emerald-700'
-                }`}>
-                  {(hoveredStation.health?.overall_health_score ?? 100) < 60 ? 'SENSOR ANOMALY' : 'ACTIVE STREAMING'}
-                </span>
-              </div>
+              {(() => {
+                const hoveredAnom = anomalies.find(a => (a.station_id === hoveredStation.station_id || a.station_id === hoveredStation.id) && a.is_anomaly);
+                const isHoveredFault = (hoveredStation.health?.overall_health_score ?? 100) < 60 || Boolean(hoveredAnom);
+
+                return (
+                  <div className="flex items-center justify-between text-[10px] font-mono pt-1 text-slate-500">
+                    <span>SYNAPTIC STATUS:</span>
+                    <span className={`font-bold px-2 py-0.5 rounded-full ${
+                      isHoveredFault
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-emerald-100 text-emerald-700'
+                    }`}>
+                      {isHoveredFault ? (hoveredAnom?.root_cause ? `ANOMALY: ${hoveredAnom.root_cause.toUpperCase().replace(/_/g, ' ')}` : 'SENSOR ANOMALY') : 'ACTIVE STREAMING'}
+                    </span>
+                  </div>
+                );
+              })()}
             </motion.div>
             );
           })()}
